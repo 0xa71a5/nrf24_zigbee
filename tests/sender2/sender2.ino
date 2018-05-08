@@ -29,45 +29,10 @@ void print_info()
 }
 
 
-struct phy_packet_handle {
-  uint8_t type:2;
-  uint8_t length:5;
-  uint8_t packet_index:3;
-  uint8_t slice_size:3;
-  uint8_t slice_index:3;
-  uint8_t crc:8;
-  uint8_t data[0];
-};
-
 static const uint8_t mac_addr_length = 5;
 static uint8_t last_mac_addr[5] = {0};
 
-#define MAX_PACKET_INDEX 8
-
-#define MAX_PACKET_DATA_SIZE 29
-
-enum ack_type {
-  ACK_SUCCESS = 0,
-  ACK_SUCCESS_WITH_INDEX, /* Index of success handled packet */
-  ACK_FAILED_NOT_COMPLETED, /* When not receiving completed
-                                               message slices */
-  ACK_FAILED_COMMON_REASON, /* Common fail reasons */
-};
-
-enum phy_packet_type {
-  MESSAGE_PACKET = 0,
-  ACK_PACKET,
-  CONTROL_PACKET,
-};
-
-
-bool phy_layer_data_ready(void)
-{
-  return nrf_data_ready();
-}
-
-
-void phy_packet_trace(struct phy_packet_handle * packet, uint8_t mode = 0)
+void phy_packet_trace(phy_packet_handle * packet, uint8_t mode = 0)
 {
   if (mode == 0) {
     pr_debug("######## Phy packet trace ########\n");
@@ -96,8 +61,24 @@ void phy_packet_trace(struct phy_packet_handle * packet, uint8_t mode = 0)
   printf("\n\n");
 }
 
+static uint8_t phy_layer_addr[2];
 
-void phy_layer_set_tx_addr(uint8_t *addr, uint8_t length)
+inline void phy_layer_set_src_addr(uint8_t src_addr[2])
+{
+  SRC_ADDR_COPY(phy_layer_addr, src_addr);
+}
+
+inline void phy_layer_get_src_addr(uint8_t src_addr[2])
+{
+  SRC_ADDR_COPY(src_addr, phy_layer_addr);
+}
+
+bool phy_layer_data_ready(void)
+{
+  return nrf_data_ready();
+}
+
+void phy_layer_set_dst_addr(uint8_t *addr, uint8_t length)
 {
   if (length == 5)
     nrf_set_tx_addr(addr);
@@ -106,7 +87,7 @@ void phy_layer_set_tx_addr(uint8_t *addr, uint8_t length)
   }
 }
 
-bool phy_layer_send_slice_packet(struct phy_packet_handle * packet)
+bool phy_layer_send_slice_packet(phy_packet_handle * packet)
 {
   nrf_reliable_send((uint8_t *)packet);
 }
@@ -117,7 +98,7 @@ bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t 
   uint8_t i;
   static uint8_t packet_index = 0;
   uint8_t packet_mem[32] = {0};
-  struct phy_packet_handle * packet = (struct phy_packet_handle *)packet_mem;
+  phy_packet_handle * packet = (phy_packet_handle *)packet_mem;
   uint8_t packet_send_status = 0x00;
   uint8_t *data_offset = raw_data; /* Offset ptr for raw_data*/
 
@@ -125,6 +106,7 @@ bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t 
   packet->packet_index = packet_index;
   packet->slice_size = length / MAX_PACKET_DATA_SIZE + 
                       ((length % MAX_PACKET_DATA_SIZE) != 0);
+  phy_layer_get_src_addr(packet->src_addr);
 
   for (i = 0; i < mac_addr_length; i ++)
     if (dst_mac_addr[i] != last_mac_addr[i]) {
@@ -134,7 +116,7 @@ bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t 
 
   if (compare_flag) {
     pr_debug("Tx addr not the same as last one,write new addr\n");
-    phy_layer_set_tx_addr(dst_mac_addr, mac_addr_length);
+    phy_layer_set_dst_addr(dst_mac_addr, mac_addr_length);
   }
 
   /* Slice 128 byte data to multiple parts, each one's max length is 29 byte */
@@ -151,44 +133,12 @@ bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t 
    
     packet->slice_index = i;
     /* We just calculate header crc */
-    packet->crc = crc_calculate((uint8_t *)packet, 2); 
+    packet->crc = crc_calculate((uint8_t *)packet, PHY_PACKET_HEADER_SIZE);
     memcpy(packet->data, data_offset, packet->length);
     data_offset += packet->length;
     //phy_packet_trace(packet);
     phy_layer_send_slice_packet(packet);
     //phy_packet_trace(packet ,0);
-  }
-
-  /* Wait ack before timeout */
-  /* Maybe this ack waiting shall be done in listener handle */
-  #define ACK_TIMEOUT 10 /* 10ms wait for ack */
-  uint32_t check_point = millis();
-  uint8_t ack_result = ACK_SUCCESS_WITH_INDEX;
-  while (!phy_layer_data_ready()) {
-    if (millis() - check_point > ACK_TIMEOUT) {
-      ack_result = ACK_FAILED_COMMON_REASON;
-      break;
-    }
-  }
-
-  if (ack_result != ACK_FAILED_COMMON_REASON) {
-    nrf_get_data(packet_mem);
-    if (packet->type == ACK_PACKET) {
-      ack_result = packet->data[0];
-      if (ack_result == ACK_SUCCESS_WITH_INDEX ||
-          ack_result == ACK_SUCCESS) {
-        pr_info("Got ack success for index %u\n", packet->data[1]);
-      }
-      else {
-        pr_info("Got error ack for missed slice:0x%02X\n", packet->data[1]);
-      }      
-    }
-    else {
-      pr_info("This is not what we want.\n");
-    }
-  }
-  else {
-    pr_err("Wait ack until timeout\n");
   }
 
   packet_index = (packet_index + 1) % MAX_PACKET_INDEX;
@@ -204,6 +154,7 @@ void setup()
   nrf_gpio_init(8, 9); //Set ce pin and csn pin
   nrf_set_tx_addr((uint8_t *)"mac01");
   nrf_set_rx_addr((uint8_t *)"mac02");
+  phy_layer_set_src_addr("02");
   send_id = 0x02;
   nrf_chip_config(12, 32); // Set channel and payload
   nrf_set_retry_times(5);
@@ -223,12 +174,13 @@ uint32_t loop_time = 0;
 
 void loop()
 {
+  #define test_size 15
   uint8_t data[128];
-  for (int i = 0; i < 128; i++)
+  for (int i = 0; i < test_size; i++)
     data[i] = i;
-  pr_info("Call phy_layer_send_raw_data\n");
-  phy_layer_send_raw_data("mac01", data, 128);
-  delay(2000);
+  pr_info("Call phy_layer_send_raw_data\n\n");
+  phy_layer_send_raw_data("mac01", data, test_size);
+  delay(1000);
 }
 
 void loop_old()

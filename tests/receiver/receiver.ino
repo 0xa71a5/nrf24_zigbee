@@ -1,8 +1,8 @@
 #include <NRF24Zigbee.h>
 
-#define pr_err(...) printf("[-] ");printf(__VA_ARGS__)
-#define pr_info(...) printf("[+] ");printf(__VA_ARGS__)
-#define pr_debug(...) printf("[?] ");printf(__VA_ARGS__)
+#define pr_err(...) printf(__VA_ARGS__)
+#define pr_info(...) printf(__VA_ARGS__)
+#define pr_debug(...) printf(__VA_ARGS__)
 
 int serial_putc( char c, struct __file * )
 {
@@ -13,7 +13,6 @@ void printf_begin(void)
 {
   fdevopen( &serial_putc, 0 );
 }
-
 
 void print_info()
 {
@@ -26,52 +25,9 @@ void print_info()
   printf("###############  REG TRACE END  ###############\n\n");
 }
 
-struct phy_packet_handle {
-  uint8_t type:2;
-  uint8_t length:5;
-  uint8_t packet_index:3;
-  uint8_t slice_size:3;
-  uint8_t slice_index:3;
-  uint8_t crc:8;
-  uint8_t data[0];
-};
+static rx_node_handle rx_fifo_mem[MAX_FIFO_SIZE];/* This consumes 528 bytes */
+static rx_fifo_handle fifo_instance;
 
-void test()
-{
-  uint8_t raw_packet[32] = {0};
-  struct phy_packet_handle *input = (struct phy_packet_handle *)raw_packet;
-  input->type = 0x00;
-  input->length = 20;
-  input->packet_index = 5;
-  input->slice_size = 4;
-  input->slice_index = 3;
-  input->crc = 0xf3;
-  for (int i = 0; i < input->length; i ++)
-    input->data[i] = i;
-
-  printf("Array = 0x%02X 0x%02X 0x%02X 0x%02X\n", 
-    raw_packet[0], raw_packet[1], raw_packet[2], raw_packet[3]);
-  
-  struct phy_packet_handle *parser= (struct phy_packet_handle *)raw_packet;
-  printf("type = %u\n", parser->type);
-  printf("length = %u\n", parser->length);
-  printf("index = %u\n", parser->packet_index);
-  printf("slice_size = %u\n", parser->slice_size);
-  printf("slice_index = %u\n", parser->slice_index);
-  printf("crc = 0x%02X\n", parser->crc);
-  printf("Print data ===> \n");
-  for (int i = 0; i < input->length; i ++) {
-    if (i % 7 == 0)
-      printf("\n");
-    printf("0x%02X ", input->data[i]);
-  }
-
-  //while(1);
-}
-
-#define MAX_PACKET_INDEX 8
-
-#define MAX_PACKET_DATA_SIZE 29
 
 void nrf_set_broadcast_addr(uint8_t addr)
 {
@@ -83,35 +39,9 @@ bool phy_layer_data_ready(void)
   return nrf_data_ready();
 }
 
-struct phy_rx_node_handle {
-  uint8_t data[128];
-  uint8_t node_status;
-  uint8_t recv_chain;
-  uint16_t length;
-};
+//rx_node_handle phy_rx_node_instance;
 
-enum fifo_status {
-  NODE_INVALID = 0,
-  NODE_VALID
-};
-
-enum ack_type {
-  ACK_SUCCESS = 0,
-  ACK_SUCCESS_WITH_INDEX, /* Index of success handled packet */
-  ACK_FAILED_NOT_COMPLETED, /* When not receiving completed
-                                               message slices */
-  ACK_FAILED_COMMON_REASON, /* Common fail reasons */
-};
-
-enum phy_packet_type {
-  MESSAGE_PACKET = 0,
-  ACK_PACKET,
-  CONTROL_PACKET,
-};
-
-struct phy_rx_node_handle phy_rx_node_instance;
-
-void phy_packet_trace(struct phy_packet_handle * packet, uint8_t mode = 0)
+void phy_packet_trace(phy_packet_handle * packet, uint8_t mode = 0)
 {
   if (mode == 0) {
     pr_debug("######## Phy packet trace ########\n");
@@ -119,7 +49,8 @@ void phy_packet_trace(struct phy_packet_handle * packet, uint8_t mode = 0)
     pr_debug("length      :%4u\n", packet->length);
     pr_debug("packet_index:%4u\n", packet->packet_index);
     pr_debug("slice_size  :%4u\n", packet->slice_size);
-    pr_debug("slice_index :%4u\n", packet->slice_index);
+    pr_debug("slice_index : %4u\n", packet->slice_index);
+    pr_debug("src_addr    :0x%04X\n", *(uint16_t *)packet->src_addr);
     pr_debug("crc         :0x%02X\n", packet->crc);
     pr_debug("data        :");
     for (int i = 0; i < packet->length; i ++) {
@@ -140,13 +71,13 @@ void phy_packet_trace(struct phy_packet_handle * packet, uint8_t mode = 0)
   printf("\n\n");
 }
 
-inline void phy_layer_reset_node(struct phy_rx_node_handle *node)
+inline void phy_layer_reset_node(rx_node_handle *node)
 {
   node->node_status = NODE_INVALID;
   node->recv_chain = 0x00;
 }
 
-bool phy_layer_send_slice_packet(struct phy_packet_handle * packet, uint32_t max_retry = 100)
+bool phy_layer_send_slice_packet(phy_packet_handle * packet, uint32_t max_retry = 100)
 {
   nrf_reliable_send((uint8_t *)packet, 32, max_retry);
 }
@@ -155,7 +86,7 @@ bool phy_layer_send_ack(ack_type ack, uint8_t * optional_data = NULL,
                               uint8_t length = 0)
 {
   uint8_t packet_mem[32];
-  struct phy_packet_handle * packet = (struct phy_packet_handle *) packet_mem;
+  phy_packet_handle * packet = (phy_packet_handle *) packet_mem;
   packet->type = ACK_PACKET;
   packet->length = 1 + length;/* 1byte for ack_type and 
                                   length bytes for optional data */
@@ -169,13 +100,15 @@ bool phy_layer_send_ack(ack_type ack, uint8_t * optional_data = NULL,
 void phy_layer_listener(void)
 {
   static uint8_t raw_data[32];
-  static struct phy_packet_handle * packet = (phy_packet_handle *)raw_data;
-  static struct phy_rx_node_handle * phy_rx_node = &phy_rx_node_instance;
+  static phy_packet_handle * packet = (phy_packet_handle *)raw_data;
+  static rx_node_handle * phy_rx_node = NULL;
   static uint8_t in_receive_state = 0;
   static uint16_t packet_receive_duration = 0;
   static uint16_t packet_max_duration = 0;
 
   /* Listener shall check if got any rx data from phy */
+
+  /* TODO: Add timeout check */
   if (in_receive_state && packet_receive_duration > packet_max_duration) {
     pr_err("Time out for this message chain reception.\n");
     /* Do something for timeout handle */
@@ -186,24 +119,40 @@ void phy_layer_listener(void)
     uint8_t pipe = (status >> 1) & 0x07; /* Get what pipe channel is
                                          this data from */
     nrf_get_data(raw_data);
-    if (crc_calculate((uint8_t *)packet, 2) != packet->crc) {
+    //phy_packet_trace(packet, 0);
+
+    if (crc_calculate((uint8_t *)packet, PHY_PACKET_HEADER_SIZE) != packet->crc) {
         pr_err("Recv packet crc check err, raw=0x%02X calc=0x%02X, drop it!\n", packet->crc, crc_calculate((uint8_t *)packet, 2));
         //phy_packet_trace(packet, 1);
         return ;
     }
 
     if (packet->type == MESSAGE_PACKET) {
+      phy_rx_node = fifo_find_node(&fifo_instance, packet->src_addr, packet->packet_index);
+
+      if (!phy_rx_node) {
+        rx_node_handle tmp_fifo_node;
+        SRC_ADDR_COPY(tmp_fifo_node.src_addr, packet->src_addr);
+        tmp_fifo_node.packet_index = packet->packet_index;
+        /* Create a new node which doesnt exsits before */
+        //pr_debug("packet->src_addr = 0x%04X\n", *(uint16_t *)packet->src_addr);
+        //pr_debug("Push new node into fifo, src_addr=0x%04X, packet_index=0x%02X\n", *(uint16_t *)tmp_fifo_node.src_addr, tmp_fifo_node.packet_index);
+        fifo_in(&fifo_instance, &tmp_fifo_node);        
+        phy_rx_node = fifo_find_node(&fifo_instance, packet->src_addr, packet->packet_index);
+        phy_layer_reset_node(phy_rx_node);
+      }
 
       if (packet->slice_index == 0) { /* This is the first slice */
-          pr_info("First slice,%u/%u ;Pipe %u, Index %u\n", packet->slice_index, 
+          pr_debug("First  slice, %u/%u ;Pipe %u, Index %u\n", packet->slice_index, 
             packet->slice_size - 1, pipe, packet->packet_index);
           phy_layer_reset_node(phy_rx_node);
       }
       /* If this is the last slice or timeout , we shall send 
                                               control msg to sender */
-      else if (packet->slice_index == packet->slice_size-1) { 
+      /* Don't use 'else' ,cause slice_size could be 1 */
+      if (packet->slice_index == packet->slice_size-1) { 
           phy_rx_node->recv_chain |= (1 << (uint8_t)packet->slice_index);
-          pr_info("Last slice, %u/%u ;Pipe %u, Index %u\n", packet->slice_index, 
+          pr_debug("Last   slice, %u/%u ;Pipe %u, Index %u\n", packet->slice_index, 
             packet->slice_size - 1, pipe, packet->packet_index);
             /* Check if all slices received and send ack to sender .
              If not all slices received ,we have two ways to handle this 
@@ -214,9 +163,11 @@ void phy_layer_listener(void)
           uint8_t expect_status = (uint8_t)0xff >> (8 - packet->slice_size);
           //phy_layer_set_tx_addr()
           if (phy_rx_node->recv_chain != expect_status) {
-            /* Some slices missed */
+            /* Some slices missed, here we dont want a ack or any compensate */
             uint8_t missed_slices = phy_rx_node->recv_chain;
-            phy_layer_send_ack(ACK_FAILED_NOT_COMPLETED, &missed_slices, 1);
+            //phy_layer_send_ack(ACK_FAILED_NOT_COMPLETED, &missed_slices, 1);
+            phy_rx_node->node_status = NODE_INVALID;
+            /* TODO: Invalid packets are to removed from fifo */
             pr_err("expect_status=0x%02X, missed_slices=0x%02X\n", 
                                               expect_status, missed_slices);
           }
@@ -229,12 +180,14 @@ void phy_layer_listener(void)
                                     packet->slice_size;
             pr_info("Receive all slice packets successfully\n");
           }
+          fifo_traverse(&fifo_instance);
           printf("\n");
       }
       /* This is middle slices, 
          check if this node's first slice exists */
       else {
-          pr_info("Middle slice , %u/%u ;Pipe %u, Index %u\n", packet->slice_index, 
+        if (packet->slice_index)
+          pr_info("Middle slice, %u/%u ;Pipe %u, Index %u\n", packet->slice_index, 
               packet->slice_size - 1, pipe, packet->packet_index);
       }
 
@@ -279,28 +232,16 @@ void setup()
   nrf_set_retry_durtion(750);
   nrf_set_channel(100);
   Serial.println("Zigbee network starts!");
-  print_info();
+  fifo_init(&fifo_instance, rx_fifo_mem, MAX_FIFO_SIZE);
   enable_rx();
 }
 
-uint32_t comm_rate = 0;
-uint32_t comm_sum = 0;
-uint32_t last_check_sum = 0;
-uint32_t last_check_time = 0;
-
-uint8_t last_seq_num[10] = {0}; /* Care that only 10 node addr allowed! */
-uint8_t data[32];
-uint32_t print_count = 0;
 
 #define RATE_SAMPLE_TIME 128
 #define RATE_SAMPLE_TIME_SHIFT 7
 
 #define MAX_RETRY_TIME 10
 
-volatile uint32_t seq_num = 0;
-uint8_t send_id = 0;
-uint8_t crc = 0;
-uint8_t crc_check = 0;
 
 
 void loop()
@@ -322,7 +263,7 @@ void loop()
   //printf("\n");
 }
 
-
+#ifdef test__
 void loop_old()
 {
   if (nrf_data_ready()) {
@@ -355,4 +296,4 @@ void loop_old()
   }
   
 }
-
+#endif

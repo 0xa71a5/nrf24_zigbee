@@ -2,6 +2,7 @@
 #define NRF24_ZIGBEE_H
 
 #include <SPI.h>
+#include "rx_fifo.h"
 
 #define CONFIG      0x00
 #define EN_AA       0x01
@@ -86,6 +87,38 @@
 #define TX_REACH_DST 0
 #define TX_TIMEOUT   1
 #define TX_SENDING   2
+
+#define MAX_PACKET_INDEX 8
+#define PHY_PACKET_HEADER_SIZE 4 /*This size + 1 equals real header size */
+#define MAX_PACKET_DATA_SIZE 27
+
+typedef struct _phy_packet_handle {
+  uint8_t type:2;
+  uint8_t length:5;
+  uint8_t packet_index:3;
+  uint8_t slice_size:3;
+  uint8_t slice_index:3; /* 2Byte Up to here*/
+  uint8_t src_addr[2];
+  uint8_t crc;
+  uint8_t data[0];
+} phy_packet_handle;
+
+enum ack_type {
+  ACK_SUCCESS = 0,
+  ACK_SUCCESS_WITH_INDEX, /* Index of success handled packet */
+  ACK_FAILED_NOT_COMPLETED, /* When not receiving completed
+                                               message slices */
+  ACK_FAILED_COMMON_REASON, /* Common fail reasons */
+};
+
+enum phy_packet_type {
+  MESSAGE_PACKET = 0,
+  ACK_PACKET,
+  CONTROL_PACKET,
+};
+
+
+
 
 uint8_t read_register(uint8_t reg);
 uint8_t spi_transfer(uint8_t data);
