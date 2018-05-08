@@ -1,65 +1,8 @@
 #include <NRF24Zigbee.h>
-#define pr_err(...) printf("[-] ");printf(__VA_ARGS__)
-#define pr_info(...) printf("[+] ");printf(__VA_ARGS__)
-#define pr_debug(...) printf("[?] ");printf(__VA_ARGS__)
-
-
-int serial_putc( char c, struct __file * )
-{
-  Serial.write( c );
-  return c;
-}
-void printf_begin(void)
-{
-  fdevopen( &serial_putc, 0 );
-}
-
-uint8_t send_id = 0x00;
-
-
-void print_info()
-{
-  printf("\n############### REG TRACE START ###############\n");
-  printf("EN_AA     = 0x%02X\n", read_register(EN_AA));
-  printf("EN_RXADDR = 0x%02X\n", read_register(EN_RXADDR));
-  printf("RX_ADDR_P2= '%c' RX_PW_P2=%u\n", read_register(RX_ADDR_P2), read_register(RX_PW_P2));
-  printf("RX_ADDR_P3= '%c' RX_PW_P3=%u\n", read_register(RX_ADDR_P3), read_register(RX_PW_P3));
-  printf("RX_ADDR_P4= '%c' RX_PW_P4=%u\n", read_register(RX_ADDR_P4), read_register(RX_PW_P4));
-  printf("###############  REG TRACE END  ###############\n\n");
-}
 
 
 static const uint8_t mac_addr_length = 5;
 static uint8_t last_mac_addr[5] = {0};
-
-void phy_packet_trace(phy_packet_handle * packet, uint8_t mode = 0)
-{
-  if (mode == 0) {
-    pr_debug("######## Phy packet trace ########\n");
-    pr_debug("type        :%4u\n", packet->type);
-    pr_debug("length      :%4u\n", packet->length);
-    pr_debug("packet_index:%4u\n", packet->packet_index);
-    pr_debug("slice_size  :%4u\n", packet->slice_size);
-    pr_debug("slice_index :%4u\n", packet->slice_index);
-    pr_debug("crc         :0x%02X\n", packet->crc);
-    pr_debug("data        :");
-    for (int i = 0; i < packet->length; i ++) {
-      if (i % 10 == 0)
-        printf("\n");
-      printf("0x%02X ", packet->data[i]);
-    }  
-  }
-  else {
-    uint8_t *ptr = (uint8_t *)packet;
-    pr_info("######## Phy packet trace ########\n");
-    for (int i = 0; i < 32; i ++) {
-      if (i % 10 == 0)
-        printf("\n");
-      printf("0x%02X ", ptr[i]);
-    }
-  }
-  printf("\n\n");
-}
 
 static uint8_t phy_layer_addr[2];
 
@@ -71,11 +14,6 @@ inline void phy_layer_set_src_addr(uint8_t src_addr[2])
 inline void phy_layer_get_src_addr(uint8_t src_addr[2])
 {
   SRC_ADDR_COPY(src_addr, phy_layer_addr);
-}
-
-bool phy_layer_data_ready(void)
-{
-  return nrf_data_ready();
 }
 
 void phy_layer_set_dst_addr(uint8_t *addr, uint8_t length)
@@ -144,8 +82,6 @@ bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t 
   packet_index = (packet_index + 1) % MAX_PACKET_INDEX;
 }
 
-
-
 void setup()
 {
   Serial.begin(500000);
@@ -153,15 +89,14 @@ void setup()
   printf("Begin config!");
   nrf_gpio_init(8, 9); //Set ce pin and csn pin
   nrf_set_tx_addr((uint8_t *)"mac01");
-  nrf_set_rx_addr((uint8_t *)"mac02");
-  phy_layer_set_src_addr("02");
-
+  nrf_set_rx_addr((uint8_t *)"mac07");
+  phy_layer_set_src_addr("07");
   nrf_chip_config(12, 32); // Set channel and payload
   nrf_set_retry_times(5);
   nrf_set_retry_durtion(1250);
   nrf_set_channel(100);
   randomSeed(analogRead(A0)^analogRead(A1));
-  
+  while(1);
 }
 
 int count = 0;
@@ -180,5 +115,5 @@ void loop()
     data[i] = i;
   pr_info("Call phy_layer_send_raw_data\n\n");
   phy_layer_send_raw_data("mac01", data, test_size);
-  delay(300);
+  delay(200);
 }

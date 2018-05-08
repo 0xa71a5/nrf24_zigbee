@@ -34,7 +34,8 @@ void fifo_init(rx_fifo_handle * p_fifo, rx_node_handle *elements, uint8_t size);
 inline bool fifo_is_full(rx_fifo_handle * p_fifo);
 inline bool fifo_is_empty(rx_fifo_handle * p_fifo);
 bool fifo_in(rx_fifo_handle * p_fifo, rx_node_handle * value);
-bool fifo_out(rx_fifo_handle * p_fifo, rx_node_handle ** pValue);
+bool fifo_out(rx_fifo_handle * p_fifo, rx_node_handle ** p_element);
+bool fifo_top(rx_fifo_handle *p_fifo, rx_node_handle ** p_element);
 void fifo_traverse(rx_fifo_handle * p_fifo);
 rx_node_handle * fifo_find_node(rx_fifo_handle * p_fifo, uint8_t * src_addr, uint8_t packet_index);
 

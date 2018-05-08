@@ -3,6 +3,7 @@
 
 #include <SPI.h>
 #include "rx_fifo.h"
+#include "sys_print.h"
 
 #define CONFIG      0x00
 #define EN_AA       0x01
@@ -159,4 +160,6 @@ uint8_t crc_calculate(uint8_t *data_area, uint32_t length);
 bool nrf_reliable_send(uint8_t *data, uint32_t length = 32, uint32_t max_fail_time = 100);
 void nrf_retreat();
 void nrf_broad(uint8_t *data, uint32_t length = 32);
+void print_info(void);
+void nrf_set_broadcast_addr(uint8_t addr);
 #endif

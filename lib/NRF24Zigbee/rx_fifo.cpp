@@ -41,20 +41,34 @@ bool fifo_in(rx_fifo_handle * p_fifo, rx_node_handle * value)
     return true;
 }
 
-bool fifo_out(rx_fifo_handle * p_fifo, rx_node_handle ** pValue)
+bool fifo_out(rx_fifo_handle * p_fifo, rx_node_handle ** p_element)
 {
     if(fifo_is_empty(p_fifo))
-    {  
+    {
         //printf("Fifo is empty, failed to fifo_out\n");
         return false;
     }
     else
     {
         /* printf("Out node\n"); */
-        if (pValue != NULL)
-            *pValue = &p_fifo->elements[p_fifo->front];
+        if (p_element != NULL)
+            *p_element = &p_fifo->elements[p_fifo->front];
         p_fifo->front = (p_fifo->front+1) % p_fifo->size;
         p_fifo->cur_size --;
+        return true;
+    }  
+}
+
+bool fifo_top(rx_fifo_handle *p_fifo, rx_node_handle ** p_element)
+{
+    if(fifo_is_empty(p_fifo))
+    {
+        return false;
+    }
+    else
+    {
+        if (p_element != NULL)
+            *p_element = &p_fifo->elements[p_fifo->front];
         return true;
     }  
 }

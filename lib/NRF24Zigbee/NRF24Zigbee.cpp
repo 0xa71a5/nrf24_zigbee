@@ -315,6 +315,7 @@ void nrf_retreat()
   uint32_t check_time = millis();
   
   while (nrf_carrier_detect()) {
+    Serial.print("@");
     delayMicroseconds(retreat_time + random(retreat_time>>2));
     if (retreat_time < max_retreat_time)
       retreat_time <<= 1;
@@ -346,4 +347,20 @@ void nrf_broad(uint8_t *data, uint32_t length = 32)
 {
   nrf_retreat();
   nrf_send(data);
+}
+
+void print_info(void)
+{
+  debug_printf("\n############### REG TRACE START ###############\n");
+  debug_printf("EN_AA     = 0x%02X\n", read_register(EN_AA));
+  debug_printf("EN_RXADDR = 0x%02X\n", read_register(EN_RXADDR));
+  debug_printf("RX_ADDR_P2= '%c' RX_PW_P2=%u\n", read_register(RX_ADDR_P2), read_register(RX_PW_P2));
+  debug_printf("RX_ADDR_P3= '%c' RX_PW_P3=%u\n", read_register(RX_ADDR_P3), read_register(RX_PW_P3));
+  debug_printf("RX_ADDR_P4= '%c' RX_PW_P4=%u\n", read_register(RX_ADDR_P4), read_register(RX_PW_P4));
+  debug_printf("###############  REG TRACE END  ###############\n\n");
+}
+
+void nrf_set_broadcast_addr(uint8_t addr)
+{
+  config_register(RX_ADDR_P2, addr);
 }

@@ -1,51 +1,38 @@
-#include <NRF24Zigbee.h>
-
-#ifdef USE_PRINTF
-
-int serial_putc( char c, struct __file * )
-{
-  Serial.write( c );
-  return c;
-}
-void printf_begin(void)
-{
-  fdevopen( &serial_putc, 0 );
-}
-
-#else
-
-void printf_begin(void)
-{
-}
-
-#endif
-
-void print_info()
-{
-  debug_printf("\n############### REG TRACE START ###############\n");
-  debug_printf("EN_AA     = 0x%02X\n", read_register(EN_AA));
-  debug_printf("EN_RXADDR = 0x%02X\n", read_register(EN_RXADDR));
-  debug_printf("RX_ADDR_P2= '%c' RX_PW_P2=%u\n", read_register(RX_ADDR_P2), read_register(RX_PW_P2));
-  debug_printf("RX_ADDR_P3= '%c' RX_PW_P3=%u\n", read_register(RX_ADDR_P3), read_register(RX_PW_P3));
-  debug_printf("RX_ADDR_P4= '%c' RX_PW_P4=%u\n", read_register(RX_ADDR_P4), read_register(RX_PW_P4));
-  debug_printf("###############  REG TRACE END  ###############\n\n");
-}
+#include "nz_phy_layer.h"
+#include "NRF24Zigbee.h"
 
 static rx_node_handle rx_fifo_mem[MAX_FIFO_SIZE];/* This consumes 528 bytes */
 static rx_fifo_handle fifo_instance;
 
+static const uint8_t mac_addr_length = 5;
+static uint8_t last_mac_addr[5] = {0}; /* This may replace by a one-byte crc check */
+static uint8_t phy_layer_src_addr[2];
 
-void nrf_set_broadcast_addr(uint8_t addr)
+bool phy_layer_init(uint8_t *src_addr)
 {
-  config_register(RX_ADDR_P2, addr);
+  uint8_t mac_addr[5] = {'m', 'a', 'c', 'z', 'z'};
+  nrf_gpio_init(CE_PIN, CSN_PIN); //Set ce pin and csn pin
+
+  //nrf_set_tx_addr((uint8_t *)"mac01");
+  SRC_ADDR_COPY(phy_layer_src_addr, src_addr);
+  mac_addr[3] = src_addr[0];
+  mac_addr[4] = src_addr[1];
+  nrf_set_rx_addr((uint8_t *)mac_addr);
+  phy_layer_set_src_addr(phy_layer_src_addr);
+  nrf_chip_config(CHANNEL, PAYLOAD_LENGTH); // Set channel and payload
+  nrf_set_retry_times(RETRY_TIMES);
+  nrf_set_retry_durtion(RETRY_DURTION);
+  randomSeed(analogRead(A0)^analogRead(A1));
+
+  fifo_init(&fifo_instance, rx_fifo_mem, MAX_FIFO_SIZE);
+  enable_rx();
+  return true;
 }
 
 bool phy_layer_data_ready(void)
 {
   return nrf_data_ready();
 }
-
-//rx_node_handle phy_rx_node_instance;
 
 void phy_packet_trace(phy_packet_handle * packet, uint8_t mode = 0)
 {
@@ -77,13 +64,13 @@ void phy_packet_trace(phy_packet_handle * packet, uint8_t mode = 0)
   debug_printf("\n\n");
 }
 
-inline void phy_layer_reset_node(rx_node_handle *node)
+void phy_layer_reset_node(rx_node_handle *node)
 {
   node->node_status = NODE_INVALID;
   node->recv_chain = 0x00;
 }
 
-bool phy_layer_send_slice_packet(phy_packet_handle * packet, uint32_t max_retry = 100)
+bool phy_layer_send_slice_packet(phy_packet_handle * packet, uint32_t max_retry = SOFTWARE_RETRY_RATIO)
 {
   nrf_reliable_send((uint8_t *)packet, 32, max_retry);
 }
@@ -213,95 +200,102 @@ void phy_layer_listener(void)
   }
 }
 
+uint16_t phy_layer_fifo_endpoint_size(void)
+{
+  rx_node_handle * node;
+
+  if (fifo_top(&fifo_instance, &node) && node->node_status == NODE_VALID) {
+    return node->length;
+  }
+  return 0;
+}
+
 /* This function get receive data from local rx fifo.
  * @Param data: to store raw_data
  * @Param max_length: data max length to get,default to 128
  * @Return : data amount get at last 
-*/
-uint16_t phy_layer_get_data(uint8_t *data, uint16_t max_length = 128)
+ */
+uint16_t phy_layer_fifo_pop_data(uint8_t *data, uint16_t max_length = 128)
 {
-  
+  rx_node_handle * node;
+
+  if (fifo_out(&fifo_instance, &node) && node->node_status == NODE_VALID) {
+    uint16_t copy_length = node->length <= max_length ? node->length : max_length;
+    memcpy(data, node->data, copy_length);
+    return copy_length;
+  }
+  pr_debug("fifo empty ,pop no data\n");
   return 0;
 }
 
-void setup()
+void phy_layer_set_src_addr(uint8_t src_addr[2])
 {
-  Serial.begin(500000);
-  printf_begin();
- 
-  debug_printf("Begin config!");
-  nrf_gpio_init(8, 9); //Set ce pin and csn pin
-  nrf_set_tx_addr((uint8_t *)"mac00");
-  nrf_set_rx_addr((uint8_t *)"mac01");
-  nrf_set_broadcast_addr('a');
-  
-  nrf_chip_config(12, 32); // Set channel and payload
-  nrf_set_retry_times(5);
-  nrf_set_retry_durtion(750);
-  nrf_set_channel(100);
-  Serial.println("Zigbee network starts!");
-  fifo_init(&fifo_instance, rx_fifo_mem, MAX_FIFO_SIZE);
-  enable_rx();
+  SRC_ADDR_COPY(phy_layer_src_addr, src_addr);
 }
 
-
-#define RATE_SAMPLE_TIME 128
-#define RATE_SAMPLE_TIME_SHIFT 7
-
-#define MAX_RETRY_TIME 10
-
-
-
-void loop()
+void phy_layer_get_src_addr(uint8_t src_addr[2])
 {
-  phy_layer_listener();
+  SRC_ADDR_COPY(src_addr, phy_layer_src_addr);
+}
 
-  /*
-  if (phy_rx_node_instance.node_status == NODE_VALID) {
-    pr_info("Detect phy_rx_node_instance valid,print data:");
-    for (int i = 0; i < phy_rx_node_instance.length; i ++) {
-      if (i % 15 == 0)
-        debug_printf("\n");
-      debug_printf("0x%02X ", phy_rx_node_instance.data[i]);
-    }
-    debug_printf("\n\n");
-    phy_rx_node_instance.node_status = NODE_INVALID;
+void phy_layer_set_dst_addr(uint8_t *addr, uint8_t length)
+{
+  if (length == 5)
+    nrf_set_tx_addr(addr);
+  else {
+    pr_err("Temp not support non-5byte addr\n");
   }
-  */
-  //debug_printf("\n");
 }
 
-#ifdef test__
-void loop_old()
+
+bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t length)
 {
-  if (nrf_data_ready()) {
-    uint8_t status = read_register(STATUS);
-    uint8_t pipe = (status >> 1) & 0x07;
-    nrf_get_data(data);
+  uint8_t compare_flag = 0;
+  uint8_t i;
+  static uint8_t packet_index = 0;
+  uint8_t packet_mem[32] = {0};
+  phy_packet_handle * packet = (phy_packet_handle *)packet_mem;
+  uint8_t packet_send_status = 0x00;
+  uint8_t *data_offset = raw_data; /* Offset ptr for raw_data*/
+
+  packet->type = MESSAGE_PACKET;
+  packet->packet_index = packet_index;
+  packet->slice_size = length / MAX_PACKET_DATA_SIZE + 
+                      ((length % MAX_PACKET_DATA_SIZE) != 0);
+  phy_layer_get_src_addr(packet->src_addr);
+
+  for (i = 0; i < mac_addr_length; i ++)
+    if (dst_mac_addr[i] != last_mac_addr[i]) {
+      compare_flag = 1;
+      last_mac_addr[i] = dst_mac_addr[i];
+    }
+
+  if (compare_flag) {
+    pr_debug("Tx addr not the same as last one,write new addr\n");
+    phy_layer_set_dst_addr(dst_mac_addr, mac_addr_length);
+  }
+
+  /* Slice 128 byte data to multiple parts, each one's max length is 29 byte */
+  for (i = 0; i < packet->slice_size; i ++) {
+    if (i != packet->slice_size - 1) /* If not the last pack, than 
+                                                choose the max data size */
+    {
+      packet->length = MAX_PACKET_DATA_SIZE;
+    }
+    else /*If is the last pack, choose remain not sending data size as length */
+    {
+      packet->length = length % MAX_PACKET_DATA_SIZE; 
+    }  
    
-    send_id = data[29] < 10 ? data[29] : 0x00;
-    seq_num = data[30];
-    crc = data[31];
-    crc_check = crc_calculate(data, 31);
-
-    
-    if (crc == crc_check) {
-        debug_printf("Recv pipe:%u msg:[%s]\n", pipe, data);
-      
-      if ((uint8_t)seq_num == last_seq_num[send_id])
-        debug_printf("[%u]Repeat seq num %u!\n", send_id, seq_num);
-      else if ((uint8_t)seq_num != ((last_seq_num[send_id] + 1) % 256))
-        debug_printf("[%u]Lost frame! cur=%u last=%u\n", send_id, (uint8_t)seq_num, last_seq_num[send_id]);
-      last_seq_num[send_id] = seq_num;
-      
-      comm_sum += 32;
-      
-    }
-    else {
-      debug_printf("[%u] [%3u]Wrong crc 0x%02X != 0x%02X\n", send_id, seq_num, data, crc, crc_check);
-    }
-  
+    packet->slice_index = i;
+    /* We just calculate header crc */
+    packet->crc = crc_calculate((uint8_t *)packet, PHY_PACKET_HEADER_SIZE);
+    memcpy(packet->data, data_offset, packet->length);
+    data_offset += packet->length;
+    //phy_packet_trace(packet);
+    phy_layer_send_slice_packet(packet, SOFTWARE_RETRY_RATIO);
+    //phy_packet_trace(packet ,0);
   }
-  
+
+  packet_index = (packet_index + 1) % MAX_PACKET_INDEX;
 }
-#endif
