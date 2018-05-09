@@ -11,13 +11,15 @@ void print_buffer(uint8_t *base, uint16_t length)
   debug_printf("\n");
 }
 
+
 void setup()
 {
   Serial.begin(1000000);
   printf_begin();
-  debug_printf("Begin config!");
+  debug_printf("Begin config!\n");
   phy_layer_init("00");
-  Serial.println("Zigbee network starts!");
+  debug_printf("Zigbee network starts!");
+
 }
 
 uint32_t last_check_time = 0;
@@ -27,7 +29,7 @@ uint32_t wait_time = 1000;
 void loop()
 {
   if (millis() - last_check_time > wait_time) {
-    #define test_size 15
+    #define test_size 128
     uint8_t data[test_size];
     data[0] = seq_num ++;
     for (uint8_t i = 1; i < test_size-1; i++)
@@ -41,10 +43,11 @@ void loop()
     debug_printf("Take %u us to send\n\n", record_time);
 
     last_check_time = millis();
-    wait_time = random(1500);
+    wait_time = 100;//random(1500);
   }
 
   phy_layer_listener();
+
 
   uint8_t data_length;
   if ((data_length = phy_layer_fifo_top_node_size()) > 0) {

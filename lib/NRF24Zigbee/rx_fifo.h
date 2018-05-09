@@ -14,6 +14,7 @@ typedef struct __rx_node_handle {
   uint8_t length;
   uint8_t src_addr[2];
   uint8_t crc;
+  uint8_t last_start_time; /* This variable used to check packet timeout, 254 ms is the max timeout */
   uint8_t data[128];
 } rx_node_handle;
 

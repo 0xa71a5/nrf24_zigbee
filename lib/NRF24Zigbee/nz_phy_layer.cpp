@@ -89,31 +89,37 @@ void phy_layer_listener(void)
   static uint8_t raw_data[32];
   static phy_packet_handle * packet = (phy_packet_handle *)raw_data;
   static rx_node_handle * phy_rx_node = NULL;
-  static uint8_t in_receive_state = 0;
-  static uint16_t packet_receive_duration = 0;
-  static uint16_t packet_max_duration = 0;
   static uint8_t last_slice_index = 0;
   static uint16_t last_src_addr = 0;
   static uint8_t last_packet_index = 0;
 
-  /* Listener shall check if got any rx data from phy */
-  /* TODO: Add timeout check */
-  if (in_receive_state && packet_receive_duration > packet_max_duration) {
-    pr_err("Time out for this message chain reception.\n");
-    /* Do something for timeout handle */
+
+  /* Do a fifo node valid test, if the top node is invalid and timeout, pop it */
+  rx_node_handle *node = NULL;
+  if (fifo_top(&fifo_instance, &node) && node->node_status == NODE_INVALID) {
+    uint8_t cur_time = millis();
+    uint16_t durtion = 0;
+    if (cur_time < node->last_start_time)
+      durtion = cur_time + 255 - (uint16_t)node->last_start_time;
+    else
+      durtion = cur_time - node->last_start_time;
+    //debug_printf("### %u\n", durtion);
+    if (durtion > 12)
+      fifo_out(&fifo_instance, NULL); 
   }
 
+  /* Listener shall check if got any rx data from phy */
   if (phy_layer_data_ready()) {
     uint8_t status = read_register(STATUS);
     uint8_t pipe = (status >> 1) & 0x07; /* Get what pipe channel is
                                          this data from */
     nrf_get_data(raw_data);
-    //phy_packet_trace(packet, 0);
+    DISBALE_LOG_OUTPUT();
 
     if (crc_calculate((uint8_t *)packet, PHY_PACKET_HEADER_SIZE) != packet->crc) {
         pr_err("Recv packet crc check err, raw=0x%02X calc=0x%02X, drop it!\n", packet->crc, crc_calculate((uint8_t *)packet, 2));
         //phy_packet_trace(packet, 1);
-        return ;
+        goto exit;
     }
 
     if (packet->slice_index == last_slice_index && packet->src_addr == last_src_addr
@@ -144,6 +150,7 @@ void phy_layer_listener(void)
             packet->slice_size - 1, *(uint16_t *)packet->src_addr, packet->packet_index);
           phy_layer_reset_node(phy_rx_node);
           phy_layer_test_and_copy(packet, phy_rx_node);
+          phy_rx_node->last_start_time = (uint8_t)millis();
       }
       /* If this is the last slice or timeout , we shall send 
                                               control msg to sender */
@@ -163,11 +170,22 @@ void phy_layer_listener(void)
           //phy_layer_set_tx_addr()
           if (phy_rx_node->recv_chain != expect_status) {
             /* Some slices missed, here we dont want a ack or any compensate */
+            rx_node_handle * node = NULL;
             uint8_t missed_slices = phy_rx_node->recv_chain;
+
             phy_rx_node->node_status = NODE_INVALID;
+
+            /* Pop out this invalid packet if it is on top */
+            if (fifo_top(&fifo_instance, &node) && node->packet_index == packet->packet_index
+              && *(uint16_t *)node->src_addr == *(uint16_t *)packet->src_addr) {
+                fifo_out(&fifo_instance, NULL); 
+            }
+
+            ENABLE_LOG_OUTPUT();
             /* TODO: Invalid packets are to removed from fifo */
             pr_err("expect_status=0x%02X, missed_slices=0x%02X\n", 
                                               expect_status, missed_slices);
+            DISBALE_LOG_OUTPUT();
           }
           else {
             /* Make best efforts to send success ack to sender */
@@ -195,9 +213,9 @@ void phy_layer_listener(void)
     else {
       pr_err("Cant handle this type message : type 0x%02X\n", packet->type);
     }
-    
     exit:
 
+    ENABLE_LOG_OUTPUT();
     last_slice_index = packet->slice_index;
     last_src_addr = packet->src_addr;
     last_packet_index = packet->packet_index;

@@ -1,5 +1,7 @@
 #include "sys_print.h"
 
+uint8_t log_print_control = 1;
+
 #ifdef USE_PRINTF
 int serial_putc( char c, struct __file * )
 {

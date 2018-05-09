@@ -1,5 +1,6 @@
 #include <NRF24Zigbee.h>
 #include "nz_phy_layer.h"
+#include <TimerTwo.h>
 
 void print_buffer(uint8_t *base, uint16_t length)
 {
@@ -11,12 +12,21 @@ void print_buffer(uint8_t *base, uint16_t length)
   debug_printf("\n");
 }
 
+void interrupt_handler()
+{
+  Timer2.StopTimer();
+  phy_layer_listener();
+  Timer2.ResumeTimer();
+}
+
+
 void setup()
 {
   Serial.begin(1000000);
   printf_begin();
   printf("Begin config!");
   phy_layer_init("02");
+  //Timer2.EnableTimerInterrupt(interrupt_handler, 1000);
 }
 
 uint8_t seq_num = 0;
@@ -32,8 +42,8 @@ void loop()
     for (uint8_t i = 1; i < test_size-1; i++)
       data[i] = random(256);
     data[test_size - 1] = crc_calculate(data, test_size-1);
-    //debug_printf("===> Send to 00\n");
-    //phy_layer_send_raw_data("00", data, test_size);
+    debug_printf("===> Send to 00\n");
+    phy_layer_send_raw_data("00", data, test_size);
     last_check_time = millis();
     wait_time = random(1500);
   }
@@ -44,7 +54,7 @@ void loop()
   if ((data_length = phy_layer_fifo_top_node_size()) > 0) {
     uint8_t *data = new uint8_t(data_length);
     data_length = phy_layer_fifo_pop_data(data);
-    debug_printf("read_size=%u crc_raw=0x%02X crc_calc=0x%02X \n\n", data_length, data[data_length-1], crc_calculate(data, data_length-1));
+    debug_printf("pop size=%u crc=%u\n\n", data_length, crc_calculate(data, data_length));
     free(data);
   }
 
