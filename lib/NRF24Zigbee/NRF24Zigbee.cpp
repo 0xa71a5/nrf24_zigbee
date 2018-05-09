@@ -11,7 +11,15 @@ static uint8_t csn_pin = 9;
 static uint8_t channel = 0;
 static uint8_t payload = 32;
 
-
+void free_ram_print(void)
+{
+  extern int __heap_start, *__brkval;
+  int v;
+  uint16_t f_r = ((int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval));
+  Serial.print("Free RAM: ");
+  Serial.print(f_r);
+  Serial.print(" Byte\n");
+}
 
 uint8_t spi_transfer(uint8_t data)
 {

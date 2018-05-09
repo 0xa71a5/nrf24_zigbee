@@ -4,15 +4,15 @@
 static rx_node_handle rx_fifo_mem[MAX_FIFO_SIZE];/* This consumes 528 bytes */
 static rx_fifo_handle fifo_instance;
 
-static const uint8_t mac_addr_length = 5;
-static uint8_t last_mac_addr[5] = {0}; /* This may replace by a one-byte crc check */
+static const uint8_t mac_addr_length = 2;
+static uint8_t last_mac_addr[2] = {0}; /* This may replace by a one-byte crc check */
 static uint8_t phy_layer_src_addr[2];
 
 bool phy_layer_init(uint8_t *src_addr)
 {
-  uint8_t mac_addr[5] = {'m', 'a', 'c', 'z', 'z'};
+  uint8_t mac_addr[5] = {PUBLIC_MAC_ADDR_0, PUBLIC_MAC_ADDR_1, PUBLIC_MAC_ADDR_2, 'z', 'z'};
   nrf_gpio_init(CE_PIN, CSN_PIN); //Set ce pin and csn pin
-
+  SYS_RAM_TRACE();
   //nrf_set_tx_addr((uint8_t *)"mac01");
   SRC_ADDR_COPY(phy_layer_src_addr, src_addr);
   mac_addr[3] = src_addr[0];
@@ -23,7 +23,7 @@ bool phy_layer_init(uint8_t *src_addr)
   nrf_set_retry_times(RETRY_TIMES);
   nrf_set_retry_durtion(RETRY_DURTION);
   randomSeed(analogRead(A0)^analogRead(A1));
-
+  SYS_RAM_TRACE();
   fifo_init(&fifo_instance, rx_fifo_mem, MAX_FIFO_SIZE);
   enable_rx();
   return true;
@@ -75,6 +75,13 @@ bool phy_layer_send_slice_packet(phy_packet_handle * packet, uint32_t max_retry 
   nrf_reliable_send((uint8_t *)packet, 32, max_retry);
 }
 
+void phy_layer_test_and_copy(phy_packet_handle *packet, rx_node_handle *phy_rx_node)
+{
+  uint16_t offset = packet->slice_index * MAX_PACKET_DATA_SIZE;
+  memcpy(phy_rx_node->data + offset, packet->data, packet->length);
+  phy_rx_node->recv_chain |= (1 << (uint8_t)packet->slice_index);
+}
+
 void phy_layer_listener(void)
 {
   static uint8_t raw_data[32];
@@ -89,7 +96,6 @@ void phy_layer_listener(void)
   static uint8_t last_packet_index = 0;
 
   /* Listener shall check if got any rx data from phy */
-
   /* TODO: Add timeout check */
   if (in_receive_state && packet_receive_duration > packet_max_duration) {
     pr_err("Time out for this message chain reception.\n");
@@ -117,9 +123,9 @@ void phy_layer_listener(void)
 
     if (packet->type == MESSAGE_PACKET) {
       /* Check if this is a repeat pack */
-
+      SYS_RAM_TRACE();
       phy_rx_node = fifo_find_node(&fifo_instance, packet->src_addr, packet->packet_index);
-
+      SYS_RAM_TRACE();
       if (!phy_rx_node) {
         rx_node_handle tmp_fifo_node;
         SRC_ADDR_COPY(tmp_fifo_node.src_addr, packet->src_addr);
@@ -133,16 +139,17 @@ void phy_layer_listener(void)
       }
 
       if (packet->slice_index == 0) { /* This is the first slice */
-          pr_debug("First %u/%u Mac:0x%04X Index:%u\n", packet->slice_index, 
+          pr_debug("First %u/%u 0x%04X %u\n", packet->slice_index, 
             packet->slice_size - 1, *(uint16_t *)packet->src_addr, packet->packet_index);
           phy_layer_reset_node(phy_rx_node);
+          phy_layer_test_and_copy(packet, phy_rx_node);
       }
       /* If this is the last slice or timeout , we shall send 
                                               control msg to sender */
       /* Don't use 'else' ,cause slice_size could be 1 */
       if (packet->slice_index == packet->slice_size-1) { 
           phy_rx_node->recv_chain |= (1 << (uint8_t)packet->slice_index);
-          pr_debug("Last  %u/%u Mac:0x%04X Index:%u\n", packet->slice_index, 
+          pr_debug("Last  %u/%u 0x%04X %u\n", packet->slice_index, 
             packet->slice_size - 1, *(uint16_t *)packet->src_addr, packet->packet_index);
             /* Check if all slices received and send ack to sender .
              If not all slices received ,we have two ways to handle this 
@@ -151,6 +158,7 @@ void phy_layer_listener(void)
              sender and hope it will then sends those slices.          
           */
           uint8_t expect_status = (uint8_t)0xff >> (8 - packet->slice_size);
+          
           //phy_layer_set_tx_addr()
           if (phy_rx_node->recv_chain != expect_status) {
             /* Some slices missed, here we dont want a ack or any compensate */
@@ -163,29 +171,25 @@ void phy_layer_listener(void)
           else {
             /* Make best efforts to send success ack to sender */
             uint8_t packet_index = packet->packet_index;
+
+            phy_layer_test_and_copy(packet, phy_rx_node);
+
             phy_rx_node->node_status = NODE_VALID;
-            phy_rx_node->length = (packet->slice_size-1) * MAX_PACKET_DATA_SIZE +
-                                    packet->slice_size;
-            //pr_info("Rece all succ\n");
+            phy_rx_node->length = (packet->slice_size-1) * MAX_PACKET_DATA_SIZE + packet->length;
           }
           fifo_traverse(&fifo_instance);
-          debug_printf("\n");
+          SYS_RAM_TRACE();
       }
       /* This is middle slices, 
          check if this node's first slice exists */
       else {
         if (packet->slice_index)
-          pr_debug("Mid   %u/%u Mac:0x%04X Index:%u\n", packet->slice_index, 
+          pr_debug("Mid   %u/%u 0x%04X %u\n", packet->slice_index, 
             packet->slice_size - 1, *(uint16_t *)packet->src_addr, packet->packet_index);
+          SYS_RAM_TRACE();
+        phy_layer_test_and_copy(packet, phy_rx_node);
       }
 
-      /* Parse recv packet and fetch data into fifo node */
-      if (!(phy_rx_node->recv_chain & (1 << (uint8_t)packet->slice_index))) {
-        /* This slice doesnt exsits */
-        uint16_t offset = packet->slice_index * MAX_PACKET_DATA_SIZE;
-        memcpy(phy_rx_node->data + offset, packet->data, packet->length);
-        phy_rx_node->recv_chain |= (1 << (uint8_t)packet->slice_index);
-      }
     }
     else {
       pr_err("Cant handle this type message : type 0x%02X\n", packet->type);
@@ -200,7 +204,17 @@ void phy_layer_listener(void)
   }
 }
 
-uint16_t phy_layer_fifo_endpoint_size(void)
+uint16_t phy_layer_fifo_availables(void)
+{
+  uint8_t result = 0;
+
+  for (uint8_t i = 0; i < fifo_instance.size; i ++) {
+    result += (fifo_instance.elements[i].node_status == NODE_VALID);
+  }
+  return result;
+}
+
+uint16_t phy_layer_fifo_top_node_size(void)
 {
   rx_node_handle * node;
 
@@ -219,9 +233,11 @@ uint16_t phy_layer_fifo_pop_data(uint8_t *data, uint16_t max_length = 128)
 {
   rx_node_handle * node;
 
-  if (fifo_out(&fifo_instance, &node) && node->node_status == NODE_VALID) {
+  /* Dont pop node at first cause top node maybe invalid */
+  if (fifo_top(&fifo_instance, &node) && node->node_status == NODE_VALID) {
     uint16_t copy_length = node->length <= max_length ? node->length : max_length;
     memcpy(data, node->data, copy_length);
+    fifo_out(&fifo_instance, &node);
     return copy_length;
   }
   pr_debug("fifo empty ,pop no data\n");
@@ -238,13 +254,10 @@ void phy_layer_get_src_addr(uint8_t src_addr[2])
   SRC_ADDR_COPY(src_addr, phy_layer_src_addr);
 }
 
-void phy_layer_set_dst_addr(uint8_t *addr, uint8_t length)
+void phy_layer_set_dst_addr(uint8_t *addr)
 {
-  if (length == 5)
-    nrf_set_tx_addr(addr);
-  else {
-    pr_err("Temp not support non-5byte addr\n");
-  }
+  uint8_t mac_addr[5] = {PUBLIC_MAC_ADDR_0, PUBLIC_MAC_ADDR_1, PUBLIC_MAC_ADDR_2, addr[0], addr[1]};
+  nrf_set_tx_addr(mac_addr);
 }
 
 
@@ -258,21 +271,17 @@ bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t 
   uint8_t packet_send_status = 0x00;
   uint8_t *data_offset = raw_data; /* Offset ptr for raw_data*/
 
+  SYS_RAM_TRACE();
   packet->type = MESSAGE_PACKET;
   packet->packet_index = packet_index;
   packet->slice_size = length / MAX_PACKET_DATA_SIZE + 
                       ((length % MAX_PACKET_DATA_SIZE) != 0);
   phy_layer_get_src_addr(packet->src_addr);
 
-  for (i = 0; i < mac_addr_length; i ++)
-    if (dst_mac_addr[i] != last_mac_addr[i]) {
-      compare_flag = 1;
-      last_mac_addr[i] = dst_mac_addr[i];
-    }
-
-  if (compare_flag) {
+  if (*(uint16_t *)dst_mac_addr != *(uint16_t *)last_mac_addr) {
+    SRC_ADDR_COPY(last_mac_addr, dst_mac_addr);
     pr_debug("Tx addr not the same as last one,write new addr\n");
-    phy_layer_set_dst_addr(dst_mac_addr, mac_addr_length);
+    phy_layer_set_dst_addr(dst_mac_addr);
   }
 
   /* Slice 128 byte data to multiple parts, each one's max length is 29 byte */
@@ -297,5 +306,6 @@ bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t 
     //phy_packet_trace(packet ,0);
   }
 
+  SYS_RAM_TRACE();
   packet_index = (packet_index + 1) % MAX_PACKET_INDEX;
 }

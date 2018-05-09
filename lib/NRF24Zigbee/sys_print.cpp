@@ -8,10 +8,10 @@ int serial_putc( char c, struct __file * )
 }
 void printf_begin(void)
 {
-  fdevopen( &serial_putc, 0 );
+  fdevopen( &serial_putc, 0);
 }
 #else
 void printf_begin(void)
 {
 }
-#endif#include "sys_print.h"
+#endif

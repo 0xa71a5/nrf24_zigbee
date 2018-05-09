@@ -120,7 +120,7 @@ enum phy_packet_type {
 
 
 
-
+void free_ram_print(void);
 uint8_t read_register(uint8_t reg);
 uint8_t spi_transfer(uint8_t data);
 void spi_transfer_noexchange(uint8_t *dataout,uint8_t len);
