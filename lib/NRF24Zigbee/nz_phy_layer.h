@@ -4,15 +4,20 @@
 
 #define CE_PIN 8
 #define CSN_PIN 9
-#define CHANNEL 100
-#define PAYLOAD_LENGTH 32
+#define CHANNEL 100 /* a channel takes 1MHZ bandwidth */
+#define PAYLOAD_LENGTH 32 /* byte */
 #define RETRY_TIMES 5
-#define RETRY_DURTION 1250
-#define SOFTWARE_RETRY_RATIO 10
+#define RETRY_DURTION 1000 /*us*/
+#define SOFTWARE_RETRY_RATIO 10 /* REAL_RETRY_TIMES = SOFTWARE_RETRY_RATIO * RETRY_TIMES */
 
 #define PUBLIC_MAC_ADDR_0 'm'
 #define PUBLIC_MAC_ADDR_1 'a'
 #define PUBLIC_MAC_ADDR_2 'c'
+/*
+ * PUBLIC_MAC_ADDR_3 and PUBLIC_MAC_ADDR_4 are to configured by user.
+ */
+
+#define BROADCAST_ADDR_BYTE0 0xff
 
 #define SYS_RAM_TRACE() //free_ram_print()
 

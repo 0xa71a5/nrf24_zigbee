@@ -21,15 +21,25 @@ void setup()
 }
 
 uint32_t last_check_time = 0;
+uint8_t seq_num = 0;
+uint32_t wait_time = 1000;
 
 void loop()
 {
-  if (millis() - last_check_time > 100) {
-    uint8_t data[40] = {0};
-    debug_printf("===> Send to 06\n");
-    phy_layer_send_raw_data("06", data, 11);
+
+  if (millis() - last_check_time > wait_time) {
+    #define test_size 128
+    uint8_t data[test_size];
+    data[0] = seq_num ++;
+    for (uint8_t i = 1; i < test_size-1; i++)
+      data[i] = random(256);
+    data[test_size - 1] = crc_calculate(data, test_size-1);
+    debug_printf("===> Send to 02\n");
+    phy_layer_send_raw_data("02", data, test_size);
     last_check_time = millis();
+    wait_time = 2000;//random(1500);
   }
+  
 
   phy_layer_listener();
 

@@ -18,7 +18,9 @@ bool phy_layer_init(uint8_t *src_addr)
   mac_addr[3] = src_addr[0];
   mac_addr[4] = src_addr[1];
   nrf_set_rx_addr((uint8_t *)mac_addr);
+  nrf_set_broadcast_addr(BROADCAST_ADDR_BYTE0);
   phy_layer_set_src_addr(phy_layer_src_addr);
+
   nrf_chip_config(CHANNEL, PAYLOAD_LENGTH); // Set channel and payload
   nrf_set_retry_times(RETRY_TIMES);
   nrf_set_retry_durtion(RETRY_DURTION);
@@ -90,7 +92,6 @@ void phy_layer_listener(void)
   static uint8_t in_receive_state = 0;
   static uint16_t packet_receive_duration = 0;
   static uint16_t packet_max_duration = 0;
-  
   static uint8_t last_slice_index = 0;
   static uint16_t last_src_addr = 0;
   static uint8_t last_packet_index = 0;
@@ -200,6 +201,7 @@ void phy_layer_listener(void)
     last_slice_index = packet->slice_index;
     last_src_addr = packet->src_addr;
     last_packet_index = packet->packet_index;
+
     return ;
   }
 }
