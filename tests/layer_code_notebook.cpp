@@ -3,8 +3,11 @@
  *在coord和device之间流通的时候也将是p2p的 直接发送
  */
 
+/* Nwk layer send data to mac */
 mcps_data_request()
+/* Mac layer confirms nwk layer data_request result */
 mcps_data_confirm()
+/* Receive ata from other node will trigger indication */
 mcps_data_indication()
 
 mcps_purge_request()
@@ -19,18 +22,11 @@ mlme_disassociate_request()
 mlme_disassociate_indication()
 mlme_disassociate_confirm()
 
-mlme_beacon_notify_indication()
-
 mlme_get_request()
 mlme_get_confirm()
 
-/* GTS 不使用 */
-//mlme_gts_request()
-//mlme_gts_confirm()
-//mlme_gts_indication()
-
-mlme_orphan_indicate()
-mlme_orphan_response()
+mlme_set_request()
+mlme_set_confirm()
 
 mlme_reset_request()
 mlme_reset_confirm()
@@ -43,15 +39,23 @@ mlme_scan_confirm()
 
 mlme_comm_status_indication()
 
-mlme_set_request()
-mlme_set_confirm()
-
 mlme_start_request()
 mlme_start_confirm()
 
-mlme_sync_request()
-mlme_sync_loss_indication()
+//mlme_beacon_notify_indication()
 
+/* GTS not used */
+//mlme_gts_request()
+//mlme_gts_confirm()
+//mlme_gts_indication()
+
+/* Not use orphan feature */
+//mlme_orphan_indicate()
+//mlme_orphan_response()
+
+/* non-beacon network doesnt need sync */
+//mlme_sync_request()
+//mlme_sync_loss_indication()
 
 /* poll 是device主动向coord进行接收数据请求
  * 如果当前coord有数据  那么就会返回有数据的ack
