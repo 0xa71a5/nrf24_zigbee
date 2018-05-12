@@ -1,22 +1,53 @@
+#include <FreeRTOS_AVR.h>
 #include <NRF24Zigbee.h>
 #include "nz_phy_layer.h"
-#include <TimerTwo.h>
 
-void print_buffer(uint8_t *base, uint16_t length)
+SemaphoreHandle_t phy_rx_fifo_sem;
+
+TaskHandle_t task_rx_server_handle;
+TaskHandle_t task_rx_get_data_handle;
+
+static void get_phy_layer_data_service(void * params)
 {
-  for (uint16_t i = 0; i < length; i ++) {
-    if (i % 10 == 0 && i != 0)
-      debug_printf("\n");
-    debug_printf("0x%02X ", base[i]);
+  uint8_t data_length;
+  uint8_t data[128];
+  while (1) {
+    xSemaphoreTake(phy_rx_fifo_sem, portMAX_DELAY);
+    if ((data_length = phy_layer_fifo_top_node_size()) > 0) {
+      data_length = phy_layer_fifo_pop_data(data);
+      debug_printf("read_size=%u crc_raw=0x%02X crc_calc=0x%02X \n\n", data_length, data[data_length-1], crc_calculate(data, data_length-1));
+    }
+    xSemaphoreGive(phy_rx_fifo_sem);
+
+    vTaskDelay(5);
   }
-  debug_printf("\n");
 }
 
-void interrupt_handler()
+static void phy_rx_service(void *params)
 {
-  Timer2.StopTimer();
-  phy_layer_listener();
-  Timer2.ResumeTimer();
+  while (1) {
+
+    xSemaphoreTake(phy_rx_fifo_sem, portMAX_DELAY);
+    phy_layer_listener();
+    xSemaphoreGive(phy_rx_fifo_sem);
+    
+    vTaskDelay(1);
+  }
+}
+
+static void vPrintTask(void *pvParameters) {
+  while (1) {
+    // Sleep for one second.
+    vTaskDelay(177);
+    //xSemaphoreTake(phy_rx_fifo_sem, portMAX_DELAY);
+    Serial.print(F("Unused: "));
+    Serial.print(uxTaskGetStackHighWaterMark(task_rx_server_handle));//Here is a 255 max value ,so this is bug
+    Serial.print(";");
+    Serial.print(uxTaskGetStackHighWaterMark(task_rx_get_data_handle));
+    Serial.print(";");
+    Serial.println(freeHeap());
+    //xSemaphoreTake(phy_rx_fifo_sem, portMAX_DELAY);
+  }
 }
 
 
@@ -24,42 +55,30 @@ void setup()
 {
   Serial.begin(1000000);
   printf_begin();
-  printf("Begin config!");
+  printf("Begin config!\n");
   phy_layer_init("02");
-  //Timer2.EnableTimerInterrupt(interrupt_handler, 1000);
-}
 
-uint8_t seq_num = 0;
-uint32_t last_check_time = 0;
-uint32_t wait_time = 1000;
+  phy_rx_fifo_sem = xSemaphoreCreateCounting(1, 1);
+
+  xTaskCreate(phy_rx_service, "rx_sv", configMINIMAL_STACK_SIZE +500,/*85+500 bytes stack*/
+    NULL, tskIDLE_PRIORITY + 2, &task_rx_server_handle); //Used: 580 bytes stack
+
+  xTaskCreate(get_phy_layer_data_service, "get", configMINIMAL_STACK_SIZE + 300, 
+    NULL, tskIDLE_PRIORITY + 2, &task_rx_get_data_handle);// Used 190 bytes stack
+
+  // create print task
+  xTaskCreate(vPrintTask, "prtStack", configMINIMAL_STACK_SIZE + 100,
+    NULL, tskIDLE_PRIORITY + 1, NULL);
+
+  printf("OS running...\n");
+  
+  vTaskStartScheduler();
+  
+  Serial.println(F("Die"));
+  while(1);
+}
 
 void loop()
 {
-  if (millis() - last_check_time > wait_time) {
-    #define test_size 128
-    uint8_t data[test_size];
-    data[0] = seq_num ++;
-    for (uint8_t i = 1; i < test_size-1; i++)
-      data[i] = random(256);
-    data[test_size - 1] = crc_calculate(data, test_size-1);
-    debug_printf("===> Send to 00\n");
-    phy_layer_send_raw_data("00", data, test_size);
-    last_check_time = millis();
-    wait_time = random(1500);
-  }
-
-  phy_layer_listener();
-
-  uint8_t data_length;
-  if ((data_length = phy_layer_fifo_top_node_size()) > 0) {
-    uint8_t *data = new uint8_t(data_length);
-    data_length = phy_layer_fifo_pop_data(data);
-    print_buffer(data, 10);
-    uint8_t crc = 0xf1;
-    crc = crc_calculate(data, data_length-1);
-    printf("crc=%u data_length=%u\n", crc, data_length);
-    debug_printf("pop size=%u crc=%u\n\n", data_length, crc);
-    free(data);
-  }
 
 }
