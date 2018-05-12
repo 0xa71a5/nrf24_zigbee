@@ -283,8 +283,9 @@ void power_down(){
 
 uint8_t crc_calculate(uint8_t *data_area, uint32_t length)
 {
-    uint8_t result = 0x00;
+    volatile uint8_t result = 0x00;
     uint32_t i = 0;
+
     for (i = 0; i < length; i ++) {
         result ^= data_area[i];
     }

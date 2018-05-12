@@ -18,8 +18,7 @@ void setup()
   printf_begin();
   debug_printf("Begin config!\n");
   phy_layer_init("00");
-  debug_printf("Zigbee network starts!");
-
+  debug_printf("Zigbee network starts!\n");
 }
 
 uint32_t last_check_time = 0;

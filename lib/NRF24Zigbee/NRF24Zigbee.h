@@ -4,6 +4,7 @@
 #include <SPI.h>
 #include "rx_fifo.h"
 #include "sys_print.h"
+#include "event_fifo.h"
 
 #define CONFIG      0x00
 #define EN_AA       0x01
