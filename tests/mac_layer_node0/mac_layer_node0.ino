@@ -4,9 +4,30 @@
 
 SemaphoreHandle_t phy_rx_fifo_sem;
 
+
 TaskHandle_t task_rx_server_handle;
 TaskHandle_t task_rx_get_data_handle;
 TaskHandle_t task_tx_server_handle;
+
+
+void mlme_scan()
+{
+
+}
+
+/* Format a new network request */
+void nlme_network_formation_request()
+{
+  
+}
+
+/* Format a new network confirm */
+void nlme_network_formation_confirm()
+{
+
+}
+
+
 
 
 static void get_phy_layer_data_service(void * params)
