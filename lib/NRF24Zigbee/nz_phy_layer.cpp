@@ -360,21 +360,24 @@ bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t 
   packet_index = (packet_index + 1) % MAX_PACKET_INDEX;
 }
 
-void phy_layer_rx_service(void *params)
+void phy_layer_event_process(void *params)
 {
   uint8_t data_length;
   uint8_t data[128];
+  TickType_t last_wake_time;
 
   while (1) {
     phy_layer_listener();
 
     if ((data_length = phy_layer_fifo_top_node_size()) > 0) {
       data_length = phy_layer_fifo_pop_data(data);
-      debug_printf("read_size=%u crc_raw=0x%02X crc_calc=0x%02X \n\n", data_length, data[data_length-1], crc_calculate(data, data_length-1));
+      debug_printf("<=== read_size=%u crc_raw=0x%02X crc_calc=0x%02X \n\n", data_length, data[data_length-1], crc_calculate(data, data_length-1));
     /* TODO: Indication */
-
+      
     }
-    
+
+    //last_wake_time = xTaskGetTickCount();
+    //vTaskDelayUntil(&last_wake_time, 357);
     vTaskDelay(1);
   }
 }

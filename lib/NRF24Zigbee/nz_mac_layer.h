@@ -54,7 +54,7 @@ enum mac_confirm_type_enum {
 };
 
 /* Currently, size of MAC_PIB_attributes = 24 */
-struct PIB_attributes {
+struct MAC_PIB_attributes_handle {
   uint8_t macAckWaitDuration;//0x40 int, the max number of symbols wait for an ack frame folling a transimited data frame
   
   uint8_t macAssociatedPANCoord:1;//0x56 bool, indicate if device is associated to the pan through pan coord
@@ -101,7 +101,7 @@ struct PIB_attributes {
   //uint8_t macSuperframeOrder;//not used
   uint8_t macSyncSymbolOffset;
   uint16_t macTransactionPersistenceTime;//the max time a transaction is stored by a coord
-} ;
+};
 
 extern struct PIB_attributes MAC_PIB_attributes;
 extern QueueHandle_t mac_confirm_fifo;

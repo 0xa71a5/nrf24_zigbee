@@ -29,7 +29,7 @@ static void send_packet_test(void *params)
     phy_layer_send_raw_data(dst, data, test_size);
 
     record_time = micros() - record_time;
-    debug_printf("Take %uSt to send\n\n", record_time);
+    debug_printf("Take %u s to send\n\n", record_time);
     
     vTaskDelay(500);
   }
@@ -64,7 +64,7 @@ void apl_layer_test(void *params)
 
 void setup()
 {
-  Serial.begin(1000000);
+  Serial.begin(2000000);
   printf_begin();
   debug_printf("Begin config!\n");
   phy_layer_init("00");
@@ -73,16 +73,10 @@ void setup()
   apl_layer_init();
 
 
-  xTaskCreate(phy_layer_rx_service, "rx_sv", 400,/*150 bytes stack*/
+  xTaskCreate(phy_layer_event_process, "rx_sv", 400,/*150 bytes stack*/
     NULL, tskIDLE_PRIORITY + 2, &task_rx_server_handle); //Used: 580 bytes stack
 
-  xTaskCreate(send_packet_test, "tx_sv", 350, 
-    NULL, tskIDLE_PRIORITY + 2, &task_tx_server_handle);//Used 327 byte
-
   xTaskCreate(mac_layer_event_process, "mac_sv", 250,
-    NULL, tskIDLE_PRIORITY + 2, NULL);
-
-  xTaskCreate(apl_layer_test, "apl_test", 400,
     NULL, tskIDLE_PRIORITY + 2, NULL);
 
   xTaskCreate(nwk_layer_event_process, "nwk_sv", 400,
@@ -90,6 +84,12 @@ void setup()
 
   xTaskCreate(apl_layer_event_process, "apl_sv", 400,
     NULL, tskIDLE_PRIORITY + 2, NULL);
+
+  xTaskCreate(apl_layer_test, "apl_test", 400,
+    NULL, tskIDLE_PRIORITY + 2, NULL);
+
+  xTaskCreate(send_packet_test, "tx_sv", 350, 
+    NULL, tskIDLE_PRIORITY + 2, &task_tx_server_handle);//Used 327 byte
 
   debug_printf("size of MAC_PIB_attributes = %u\n", sizeof(MAC_PIB_attributes));
   debug_printf("Zigbee network starts!\n");

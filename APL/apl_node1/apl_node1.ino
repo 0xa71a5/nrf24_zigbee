@@ -1,83 +1,102 @@
-#include <FreeRTOS_AVR.h>
 #include <NRF24Zigbee.h>
-#include "nz_phy_layer.h"
-
-SemaphoreHandle_t phy_rx_fifo_sem;
+#include <nz_phy_layer.h>
+#include <nz_mac_layer.h>
+#include <nz_nwk_layer.h>
+#include <nz_apl_layer.h>
+#include <FreeRTOS_AVR.h>
 
 TaskHandle_t task_rx_server_handle;
 TaskHandle_t task_rx_get_data_handle;
+TaskHandle_t task_tx_server_handle;
 
-static void get_phy_layer_data_service(void * params)
+
+
+static void send_packet_test(void *params)
 {
-  uint8_t data_length;
-  uint8_t data[128];
+  uint8_t seq_num = 0;
+  debug_printf("Enter send_packet_test\n");
   while (1) {
-    xSemaphoreTake(phy_rx_fifo_sem, portMAX_DELAY);
-    if ((data_length = phy_layer_fifo_top_node_size()) > 0) {
-      data_length = phy_layer_fifo_pop_data(data);
-      debug_printf("read_size=%u crc_raw=0x%02X crc_calc=0x%02X \n\n", data_length, data[data_length-1], crc_calculate(data, data_length-1));
-    }
-    xSemaphoreGive(phy_rx_fifo_sem);
-
-    vTaskDelay(5);
-  }
-}
-
-static void phy_rx_service(void *params)
-{
-  while (1) {
-
-    xSemaphoreTake(phy_rx_fifo_sem, portMAX_DELAY);
-    phy_layer_listener();
-    xSemaphoreGive(phy_rx_fifo_sem);
+    #define test_size 127
+    uint8_t data[test_size];
+    data[0] = seq_num ++;
+    for (uint8_t i = 1; i < test_size-1; i++)
+      data[i] = random(256);
+    data[test_size - 1] = crc_calculate(data, test_size-1);
+    debug_printf("===> Send to 0 0xff,crc = 0x%02X\n", data[test_size-1]);
+    uint8_t dst[2] = {'0', '0'};
+    uint32_t record_time = micros();
     
-    vTaskDelay(1);
+    phy_layer_send_raw_data(dst, data, test_size);
+
+    record_time = micros() - record_time;
+    debug_printf("Take %u s to send\n\n", record_time);
+    
+    vTaskDelay(700);
   }
 }
 
-static void vPrintTask(void *pvParameters) {
+
+
+void apl_layer_test(void *params)
+{
+  uint32_t record_time;
+  debug_printf("Enter apl_layer_test\n");
+
+
   while (1) {
-    // Sleep for one second.
-    vTaskDelay(177);
-    //xSemaphoreTake(phy_rx_fifo_sem, portMAX_DELAY);
-    Serial.print(F("Unused: "));
-    Serial.print(uxTaskGetStackHighWaterMark(task_rx_server_handle));//Here is a 255 max value ,so this is bug
-    Serial.print(";");
-    Serial.print(uxTaskGetStackHighWaterMark(task_rx_get_data_handle));
-    Serial.print(";");
-    Serial.println(freeHeap());
-    //xSemaphoreTake(phy_rx_fifo_sem, portMAX_DELAY);
+    vTaskDelay(933);
+
+    debug_printf("apl layer call nlme_network_formation_request\n");
+    nlme_network_formation_request();
+
+
+    if (signal_wait(&formation_confirm_event_flag, 100)) {
+      debug_printf("formation success\n");
+    }
+    else {
+      debug_printf("formation failed!\n");
+    }
+
   }
+
 }
+
 
 void setup()
 {
-  Serial.begin(1000000);
+  Serial.begin(2000000);
   printf_begin();
-  printf("Begin config!\n");
-  phy_layer_init("02");
+  debug_printf("Begin config!\n");
+  phy_layer_init("01");
+  mac_layer_init();
+  nwk_layer_init();
+  apl_layer_init();
 
-  phy_rx_fifo_sem = xSemaphoreCreateCounting(1, 1);
 
-  xTaskCreate(phy_rx_service, "rx_sv", 150,/*150 bytes stack*/
+  xTaskCreate(phy_layer_event_process, "rx_sv", 400,/*150 bytes stack*/
     NULL, tskIDLE_PRIORITY + 2, &task_rx_server_handle); //Used: 580 bytes stack
 
-  xTaskCreate(get_phy_layer_data_service, "getdata", 250, 
-    NULL, tskIDLE_PRIORITY + 2, &task_rx_get_data_handle);// Used 190 bytes stack
+  xTaskCreate(mac_layer_event_process, "mac_sv", 250,
+    NULL, tskIDLE_PRIORITY + 2, NULL);
 
-  // create print task
-  xTaskCreate(vPrintTask, "prtStack1", configMINIMAL_STACK_SIZE + 100,
-    NULL, tskIDLE_PRIORITY + 1, NULL);
+  xTaskCreate(nwk_layer_event_process, "nwk_sv", 400,
+    NULL, tskIDLE_PRIORITY + 2, NULL);
 
-  printf("OS running...\n");
-  
+  xTaskCreate(apl_layer_event_process, "apl_sv", 400,
+    NULL, tskIDLE_PRIORITY + 2, NULL);
+
+  xTaskCreate(apl_layer_test, "apl_test", 400,
+    NULL, tskIDLE_PRIORITY + 2, NULL);
+
+  xTaskCreate(send_packet_test, "tx_sv", 350, 
+    NULL, tskIDLE_PRIORITY + 2, &task_tx_server_handle);//Used 327 byte
+
+  debug_printf("size of MAC_PIB_attributes = %u\n", sizeof(MAC_PIB_attributes));
+  debug_printf("Zigbee network starts!\n");
   vTaskStartScheduler();
-  
-  Serial.println(F("Die"));
-  while(1);
 }
 
 void loop()
 {
-
+  
 }

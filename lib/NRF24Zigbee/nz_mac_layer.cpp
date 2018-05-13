@@ -4,7 +4,7 @@
 #define MAC_CONFIRM_FIFO_SIZE 3
 
 QueueHandle_t mac_confirm_fifo;
-struct PIB_attributes MAC_PIB_attributes;
+struct MAC_PIB_attributes_handle MAC_PIB_attributes;
 
 
 void mac_layer_init()
