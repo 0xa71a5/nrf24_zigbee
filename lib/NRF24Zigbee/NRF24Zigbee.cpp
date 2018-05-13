@@ -1,10 +1,5 @@
 #include "NRF24Zigbee.h"
 
-
-static uint8_t group_addr[GROUP_ADDR_LENGTH] = {'m', 'a', 'c', '0'};
-static uint8_t mac_addr[MAC_ADDR_LENGTH];
-static uint8_t net_addr[NET_ADDR_LENGTH];
-
 static uint8_t transfer_mode = 0;
 static uint8_t ce_pin = 13;
 static uint8_t csn_pin = 9;
@@ -144,24 +139,6 @@ uint8_t nrf_carrier_detect(void)
   return regval;
 }
 
-void nrf_set_group_addr(uint8_t *group_addr_ptr)
-{
-    memcpy(group_addr, group_addr_ptr, GROUP_ADDR_LENGTH);
-    nrf_set_net_addr();
-}
-
-void nrf_set_mac_addr(uint8_t *mac_addr_num)
-{
-    memcpy(mac_addr, mac_addr_num, MAC_ADDR_LENGTH);
-    nrf_set_net_addr();
-}
-
-void nrf_set_net_addr()
-{
-    memcpy(net_addr, group_addr, GROUP_ADDR_LENGTH);
-    memcpy(net_addr + GROUP_ADDR_LENGTH, mac_addr, MAC_ADDR_LENGTH);
-    nrf_set_rx_addr(net_addr);
-}
 
 void nrf_set_rx_addr(uint8_t * addr) /* Sets the receiving address */
 {
@@ -306,8 +283,9 @@ void power_down(){
 
 uint8_t crc_calculate(uint8_t *data_area, uint32_t length)
 {
-    uint8_t result = 0x00;
+    volatile uint8_t result = 0x00;
     uint32_t i = 0;
+
     for (i = 0; i < length; i ++) {
         result ^= data_area[i];
     }

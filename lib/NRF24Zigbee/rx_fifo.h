@@ -14,6 +14,7 @@ typedef struct __rx_node_handle {
   uint8_t length;
   uint8_t src_addr[2];
   uint8_t crc;
+  uint8_t last_start_time; /* This variable used to check packet timeout, 254 ms is the max timeout */
   uint8_t data[128];
 } rx_node_handle;
 
@@ -26,7 +27,7 @@ typedef struct __rx_fifo_handle
     uint8_t cur_size;
 } rx_fifo_handle;
 
-#define MAX_FIFO_SIZE 4
+#define MAX_FIFO_SIZE 3
 #define SRC_ADDR_COPY(dst,src) (*(uint16_t *)dst) = (*(uint16_t *)src)
 
 inline void copy_node(rx_node_handle *dst, rx_node_handle *src);

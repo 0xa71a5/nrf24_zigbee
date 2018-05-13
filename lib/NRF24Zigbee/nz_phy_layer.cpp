@@ -1,5 +1,6 @@
 #include "nz_phy_layer.h"
 #include "NRF24Zigbee.h"
+#include <FreeRTOS_AVR.h>
 
 static rx_node_handle rx_fifo_mem[MAX_FIFO_SIZE];/* This consumes 528 bytes */
 static rx_fifo_handle fifo_instance;
@@ -7,6 +8,9 @@ static rx_fifo_handle fifo_instance;
 static const uint8_t mac_addr_length = 2;
 static uint8_t last_mac_addr[2] = {0}; /* This may replace by a one-byte crc check */
 static uint8_t phy_layer_src_addr[2];
+
+static SemaphoreHandle_t rf_chip_use;
+static SemaphoreHandle_t phy_rx_fifo_sem;
 
 bool phy_layer_init(uint8_t *src_addr)
 {
@@ -18,7 +22,12 @@ bool phy_layer_init(uint8_t *src_addr)
   mac_addr[3] = src_addr[0];
   mac_addr[4] = src_addr[1];
   nrf_set_rx_addr((uint8_t *)mac_addr);
+  nrf_set_broadcast_addr(BROADCAST_ADDR_BYTE0);
   phy_layer_set_src_addr(phy_layer_src_addr);
+
+  rf_chip_use = xSemaphoreCreateCounting(1, 1);
+  phy_rx_fifo_sem = xSemaphoreCreateCounting(1, 1);
+
   nrf_chip_config(CHANNEL, PAYLOAD_LENGTH); // Set channel and payload
   nrf_set_retry_times(RETRY_TIMES);
   nrf_set_retry_durtion(RETRY_DURTION);
@@ -82,37 +91,46 @@ void phy_layer_test_and_copy(phy_packet_handle *packet, rx_node_handle *phy_rx_n
   phy_rx_node->recv_chain |= (1 << (uint8_t)packet->slice_index);
 }
 
+
 void phy_layer_listener(void)
 {
-  static uint8_t raw_data[32];
-  static phy_packet_handle * packet = (phy_packet_handle *)raw_data;
-  static rx_node_handle * phy_rx_node = NULL;
-  static uint8_t in_receive_state = 0;
-  static uint16_t packet_receive_duration = 0;
-  static uint16_t packet_max_duration = 0;
-  
-  static uint8_t last_slice_index = 0;
-  static uint16_t last_src_addr = 0;
-  static uint8_t last_packet_index = 0;
+  uint8_t raw_data[32];
+  phy_packet_handle * packet = (phy_packet_handle *)raw_data;
+  rx_node_handle * phy_rx_node = NULL;
+  uint8_t last_slice_index = 0;
+  uint16_t last_src_addr = 0;
+  uint8_t last_packet_index = 0;
 
-  /* Listener shall check if got any rx data from phy */
-  /* TODO: Add timeout check */
-  if (in_receive_state && packet_receive_duration > packet_max_duration) {
-    pr_err("Time out for this message chain reception.\n");
-    /* Do something for timeout handle */
+
+  /* Do a fifo node valid test, if the top node is invalid and timeout, pop it */
+  rx_node_handle *node = NULL;
+  if (fifo_top(&fifo_instance, &node) && node->node_status == NODE_INVALID) {
+    uint8_t cur_time = millis();
+    uint16_t durtion = 0;
+    if (cur_time < node->last_start_time)
+      durtion = cur_time + 255 - (uint16_t)node->last_start_time;
+    else
+      durtion = cur_time - node->last_start_time;
+    //debug_printf("### %u\n", durtion);
+    if (durtion > 12)
+      fifo_out(&fifo_instance, NULL); 
   }
 
+  /* Listener shall check if got any rx data from phy */
+  xSemaphoreTake(rf_chip_use, portMAX_DELAY);
   if (phy_layer_data_ready()) {
     uint8_t status = read_register(STATUS);
     uint8_t pipe = (status >> 1) & 0x07; /* Get what pipe channel is
                                          this data from */
     nrf_get_data(raw_data);
-    //phy_packet_trace(packet, 0);
+    xSemaphoreGive(rf_chip_use);
+
+    DISBALE_LOG_OUTPUT();
 
     if (crc_calculate((uint8_t *)packet, PHY_PACKET_HEADER_SIZE) != packet->crc) {
         pr_err("Recv packet crc check err, raw=0x%02X calc=0x%02X, drop it!\n", packet->crc, crc_calculate((uint8_t *)packet, 2));
         //phy_packet_trace(packet, 1);
-        return ;
+        goto exit;
     }
 
     if (packet->slice_index == last_slice_index && packet->src_addr == last_src_addr
@@ -133,7 +151,10 @@ void phy_layer_listener(void)
         /* Create a new node which doesnt exsits before */
         //pr_debug("packet->src_addr = 0x%04X\n", *(uint16_t *)packet->src_addr);
         //pr_debug("Push new node into fifo, src_addr=0x%04X, packet_index=0x%02X\n", *(uint16_t *)tmp_fifo_node.src_addr, tmp_fifo_node.packet_index);
-        fifo_in(&fifo_instance, &tmp_fifo_node);        
+        xSemaphoreTake(phy_rx_fifo_sem, portMAX_DELAY);
+        fifo_in(&fifo_instance, &tmp_fifo_node);
+        xSemaphoreGive(phy_rx_fifo_sem);
+
         phy_rx_node = fifo_find_node(&fifo_instance, packet->src_addr, packet->packet_index);
         phy_layer_reset_node(phy_rx_node);
       }
@@ -143,6 +164,7 @@ void phy_layer_listener(void)
             packet->slice_size - 1, *(uint16_t *)packet->src_addr, packet->packet_index);
           phy_layer_reset_node(phy_rx_node);
           phy_layer_test_and_copy(packet, phy_rx_node);
+          phy_rx_node->last_start_time = (uint8_t)millis();
       }
       /* If this is the last slice or timeout , we shall send 
                                               control msg to sender */
@@ -162,11 +184,24 @@ void phy_layer_listener(void)
           //phy_layer_set_tx_addr()
           if (phy_rx_node->recv_chain != expect_status) {
             /* Some slices missed, here we dont want a ack or any compensate */
+            rx_node_handle * node = NULL;
             uint8_t missed_slices = phy_rx_node->recv_chain;
+
             phy_rx_node->node_status = NODE_INVALID;
+
+            /* Pop out this invalid packet if it is on top */
+            if (fifo_top(&fifo_instance, &node) && node->packet_index == packet->packet_index
+              && *(uint16_t *)node->src_addr == *(uint16_t *)packet->src_addr) {
+                xSemaphoreTake(phy_rx_fifo_sem, portMAX_DELAY);
+                fifo_out(&fifo_instance, NULL);
+                xSemaphoreGive(phy_rx_fifo_sem);
+            }
+
+            ENABLE_LOG_OUTPUT();
             /* TODO: Invalid packets are to removed from fifo */
             pr_err("expect_status=0x%02X, missed_slices=0x%02X\n", 
                                               expect_status, missed_slices);
+            DISBALE_LOG_OUTPUT();
           }
           else {
             /* Make best efforts to send success ack to sender */
@@ -194,23 +229,28 @@ void phy_layer_listener(void)
     else {
       pr_err("Cant handle this type message : type 0x%02X\n", packet->type);
     }
-    
     exit:
 
+    ENABLE_LOG_OUTPUT();
     last_slice_index = packet->slice_index;
     last_src_addr = packet->src_addr;
     last_packet_index = packet->packet_index;
+
     return ;
   }
+  xSemaphoreGive(rf_chip_use);
+
 }
 
 uint16_t phy_layer_fifo_availables(void)
 {
   uint8_t result = 0;
-
+  
+  xSemaphoreTake(phy_rx_fifo_sem, portMAX_DELAY);
   for (uint8_t i = 0; i < fifo_instance.size; i ++) {
     result += (fifo_instance.elements[i].node_status == NODE_VALID);
   }
+  xSemaphoreGive(phy_rx_fifo_sem);
   return result;
 }
 
@@ -218,9 +258,13 @@ uint16_t phy_layer_fifo_top_node_size(void)
 {
   rx_node_handle * node;
 
+  xSemaphoreTake(phy_rx_fifo_sem, portMAX_DELAY);
   if (fifo_top(&fifo_instance, &node) && node->node_status == NODE_VALID) {
+    xSemaphoreGive(phy_rx_fifo_sem);
     return node->length;
   }
+  xSemaphoreGive(phy_rx_fifo_sem);
+
   return 0;
 }
 
@@ -233,14 +277,18 @@ uint16_t phy_layer_fifo_pop_data(uint8_t *data, uint16_t max_length = 128)
 {
   rx_node_handle * node;
 
+  xSemaphoreTake(phy_rx_fifo_sem, portMAX_DELAY);
   /* Dont pop node at first cause top node maybe invalid */
   if (fifo_top(&fifo_instance, &node) && node->node_status == NODE_VALID) {
     uint16_t copy_length = node->length <= max_length ? node->length : max_length;
     memcpy(data, node->data, copy_length);
     fifo_out(&fifo_instance, &node);
+    xSemaphoreGive(phy_rx_fifo_sem);
     return copy_length;
   }
+  xSemaphoreGive(phy_rx_fifo_sem);
   pr_debug("fifo empty ,pop no data\n");
+
   return 0;
 }
 
@@ -302,10 +350,31 @@ bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t 
     memcpy(packet->data, data_offset, packet->length);
     data_offset += packet->length;
     //phy_packet_trace(packet);
+    xSemaphoreTake(rf_chip_use, portMAX_DELAY);
     phy_layer_send_slice_packet(packet, SOFTWARE_RETRY_RATIO);
+    xSemaphoreGive(rf_chip_use);
     //phy_packet_trace(packet ,0);
   }
 
   SYS_RAM_TRACE();
   packet_index = (packet_index + 1) % MAX_PACKET_INDEX;
+}
+
+void phy_layer_rx_service(void *params)
+{
+  uint8_t data_length;
+  uint8_t data[128];
+
+  while (1) {
+    phy_layer_listener();
+
+    if ((data_length = phy_layer_fifo_top_node_size()) > 0) {
+      data_length = phy_layer_fifo_pop_data(data);
+      debug_printf("read_size=%u crc_raw=0x%02X crc_calc=0x%02X \n\n", data_length, data[data_length-1], crc_calculate(data, data_length-1));
+    /* TODO: Indication */
+
+    }
+    
+    vTaskDelay(1);
+  }
 }

@@ -78,7 +78,6 @@ void fifo_traverse(rx_fifo_handle * p_fifo)
     uint8_t i = p_fifo->front;
     uint8_t cur = 0;
 
-    printf("Traverse fifo:\n");
     for (cur = 0; cur < p_fifo->cur_size; cur ++)
     {
         printf("[0x%04X:0x%02X:%u] <=", *(uint16_t *)p_fifo->elements[i].src_addr, 

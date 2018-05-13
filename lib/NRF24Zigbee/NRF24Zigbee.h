@@ -4,6 +4,7 @@
 #include <SPI.h>
 #include "rx_fifo.h"
 #include "sys_print.h"
+#include "event_fifo.h"
 
 #define CONFIG      0x00
 #define EN_AA       0x01
@@ -144,9 +145,6 @@ uint8_t nrf_carrier_detect(void);
 void nrf_gpio_init(uint8_t ce_pin, uint8_t csn_pin);
 void nrf_chip_config(uint8_t channel, uint8_t payload);
 uint8_t nrf_send(uint8_t * value);
-void nrf_set_group_addr(uint8_t * group_addr_ptr);
-void nrf_set_mac_addr(uint8_t * mac_addr_ptr);
-void nrf_set_net_addr();
 void nrf_set_rx_addr(uint8_t * addr);
 void nrf_set_tx_addr(uint8_t * addr);
 bool nrf_data_ready();
