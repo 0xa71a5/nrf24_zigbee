@@ -50,7 +50,6 @@ static void vPrintTask(void *pvParameters) {
   }
 }
 
-
 void setup()
 {
   Serial.begin(1000000);
@@ -60,14 +59,14 @@ void setup()
 
   phy_rx_fifo_sem = xSemaphoreCreateCounting(1, 1);
 
-  xTaskCreate(phy_rx_service, "rx_sv", configMINIMAL_STACK_SIZE +500,/*85+500 bytes stack*/
+  xTaskCreate(phy_rx_service, "rx_sv", 150,/*150 bytes stack*/
     NULL, tskIDLE_PRIORITY + 2, &task_rx_server_handle); //Used: 580 bytes stack
 
-  xTaskCreate(get_phy_layer_data_service, "get", configMINIMAL_STACK_SIZE + 300, 
+  xTaskCreate(get_phy_layer_data_service, "getdata", 250, 
     NULL, tskIDLE_PRIORITY + 2, &task_rx_get_data_handle);// Used 190 bytes stack
 
   // create print task
-  xTaskCreate(vPrintTask, "prtStack", configMINIMAL_STACK_SIZE + 100,
+  xTaskCreate(vPrintTask, "prtStack1", configMINIMAL_STACK_SIZE + 100,
     NULL, tskIDLE_PRIORITY + 1, NULL);
 
   printf("OS running...\n");
