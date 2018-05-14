@@ -14,19 +14,7 @@ enum mlme_scan_type {
   orphan_scan,
 };
 
-/* Definition of status */
-#define SUCCESS 				0
-#define LIMIT_REACHED 			1
-#define NO_BEACON 				2
-#define SCAN_IN_PROGRESS		3
-#define COUNTER_ERROR			4
-#define FRAME_TOO_LONG			5
-#define UNAVAILABLE_KEY 		6
-#define UNSUPPORTED_SECURITY	7
-#define INVALID_PARAMETER 		8
-#define NO_SHORT_ADDRESS 		9
-#define	TRACKING_OFF			10
-#define	CHANNEL_ACCESS_FAILURE	11
+
 
 
 #define MAX_PAN_FIND 3
@@ -103,12 +91,68 @@ struct MAC_PIB_attributes_handle {
   uint16_t macTransactionPersistenceTime;//the max time a transaction is stored by a coord
 };
 
-extern struct PIB_attributes MAC_PIB_attributes;
+extern struct MAC_PIB_attributes_handle MAC_PIB_attributes;
 extern QueueHandle_t mac_confirm_fifo;
 
 #define mlme_set_request(perp_name, value) MAC_PIB_attributes.perp_name = value
 /* We dont use set_confirm , cause this is some kind a waste */
 #define mlme_get_request(perp_name) MAC_PIB_attributes.perp_name
+
+#define MPDU_MAX_SIZE 128
+#define MPDU_PAYLOAD_MAX_SIZE (MPDU_MAX_SIZE - sizeof(mpdu_frame_handle))
+
+typedef struct __mcps_data_confirm_handle {
+  uint8_t status;
+  uint8_t msdu_handle;
+  uint32_t time_stamp;
+} mcps_data_confirm_handle;
+
+
+enum mac_frame_type {
+  mac_frame_type_beacon = 0,
+  mac_frame_type_data,
+  mac_frame_type_ack,
+  mac_frame_type_command,
+};
+
+enum mac_addr_mode {
+  mac_addr_no_present = 0,
+  mac_addr_16bits = 2,
+  mac_addr_64bits = 3,
+};
+
+enum mac_frame_version {
+  mac_version_802_15_4_2003 = 0,
+  mac_version_802_15_4 = 1,
+};
+
+typedef struct __mpdu_frame_control {
+  uint8_t frame_type:3;
+  uint8_t security_enable:1;
+  uint8_t frame_pending:1;
+  uint8_t ack_request:1;
+  uint8_t pan_id_compression:1;
+  uint8_t reserved:3;
+  uint8_t dst_addr_mode:2;
+  uint8_t frame_version:2;
+  uint8_t src_addr_mode:2;
+} mpdu_frame_control;
+
+typedef struct __mpdu_addressing_field {
+  uint8_t a;
+} mpdu_addressing_field;
+
+typedef struct __mpdu_frame_handle {
+  uint16_t crc;/* This is not like protocal */
+  mpdu_frame_control frame_control;
+  uint8_t seq;
+  uint16_t dst_pan_id;
+  uint16_t dst_addr;
+  uint16_t src_pan_id;
+  uint16_t src_addr;
+  uint8_t payload[0];
+} mpdu_frame_handle;
+
 
 void mac_layer_init();
 
@@ -124,4 +168,10 @@ void mlme_start_request(uint16_t macPANId = 0, uint8_t logicalChannel = 0, uint8
 void mlme_start_confirm(uint8_t status);
 
 void mac_layer_event_process(void * params);
+
+void mcps_data_request(uint8_t src_addr_mode, uint8_t dst_addr_mode, uint16_t dst_pan_id, uint16_t dst_addr,
+  uint8_t msdu_length, uint8_t *msdu, uint8_t msdu_handle, uint8_t tx_options);
+
+void mcps_data_confirm(uint8_t msdu_handle, uint8_t status, uint32_t time_stamp);
+
 #endif

@@ -5,6 +5,7 @@ QueueHandle_t nwk_confirm_fifo;
 
 volatile uint8_t scan_confirm_event_flag = 0;
 volatile uint8_t start_confirm_event_flag = 0;
+struct NWK_PIB_attributes_handle NWK_PIB_attributes;
 
 void nwk_layer_init()
 {
@@ -19,7 +20,6 @@ void nlme_send_confirm_event(uint8_t confirm_type, void *ptr)
   event.confirm_ptr = (uint8_t *)ptr;
   xQueueSendToBack(apl_confirm_fifo, &event, pdMS_TO_TICKS(1000));
 }
-
 
 /* Format a new network request */
 void nlme_network_formation_request()
@@ -73,13 +73,12 @@ void nlme_network_formation_request()
 /* Format a new network confirm */
 void nlme_network_formation_confirm(uint8_t status)
 {
-  nlme_formation_confirm_handle confirm;
+  static nlme_formation_confirm_handle confirm;
 
   confirm.status = status;
   nlme_send_confirm_event(confirm_type_formation, &confirm);
   debug_printf("nlme_network_formation_confirm %u\n", status);
 }
-
 
 void nwk_layer_event_process(void * params)
 {
@@ -110,6 +109,7 @@ void nwk_layer_event_process(void * params)
   }
 }
 
+
 /*
  * @param dst_addr 			:dstination device network 16bit addr
  * @param nsdu_length		:size of nsdu
@@ -122,24 +122,37 @@ void nwk_layer_event_process(void * params)
 void nlde_data_request(uint16_t dst_addr, uint8_t nsdu_length, uint8_t *nsdu, uint8_t nsdu_handle, uint8_t broadcast_radius,
 	uint8_t discovery_route, uint8_t security_enable)
 {
+  static uint8_t npdu_mem[NPDU_MAX_SIZE] = {0};
+  npdu_frame_handle * npdu_frame = (npdu_frame_handle *)npdu_mem;
+  uint8_t to_send_size = 0;
 
+  /* Check if data length under law */
+  if (nsdu_length > NPDU_PAYLOAD_MAX_SIZE) {
+    nlde_data_confirm(FRAME_TOO_LONG, nsdu_handle, millis());
+    return;
+  }
+
+  /* Construct npdu data */
+  //npdu_frame->frame_control = 0x00;
+  npdu_frame->dst_addr = dst_addr;
+  npdu_frame->src_addr = nlme_get_request(nwkNetworkAddress);
+  npdu_frame->radius = 0xff;
+  npdu_frame->seq++;
+  npdu_frame->multicast_control = 0x00;
+  memcpy(npdu_frame->payload, nsdu, nsdu_length);
+
+  to_send_size = sizeof(npdu_frame_handle) + nsdu_length;
 }
 
-typedef __nlde_data_confirm_handle {
-	uint8_t status;
-	uint8_t nsdu_handle;
-	uint32_t tx_time;
-} nlde_data_confirm_handle;
 
-void nlde_data_confirm(uint8_t status, uint8_t nsdu_handle, uint32_t tx_time)
+void nlde_data_confirm(uint8_t status, uint8_t npdu_handle, uint32_t tx_time)
 {
-  nlde_data_confirm_handle confirm;
+  static nlde_data_confirm_handle confirm;
 
   confirm.status = status;
-  confirm.nsdu_handle = nsdu_handle;
+  confirm.nsdu_handle = npdu_handle;
   confirm.tx_time = tx_time;
 
   nlme_send_confirm_event(confirm_type_data_confirm, &confirm);
   debug_printf("nlde_data_confirm %u\n", status);
 }
-

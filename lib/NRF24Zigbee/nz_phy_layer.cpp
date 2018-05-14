@@ -81,7 +81,7 @@ void phy_layer_reset_node(rx_node_handle *node)
 
 bool phy_layer_send_slice_packet(phy_packet_handle * packet, uint32_t max_retry = SOFTWARE_RETRY_RATIO)
 {
-  nrf_reliable_send((uint8_t *)packet, 32, max_retry);
+  return nrf_reliable_send((uint8_t *)packet, 32, max_retry);
 }
 
 void phy_layer_test_and_copy(phy_packet_handle *packet, rx_node_handle *phy_rx_node)
@@ -313,6 +313,7 @@ bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t 
 {
   uint8_t compare_flag = 0;
   uint8_t i;
+  uint8_t send_result = 1;
   static uint8_t packet_index = 0;
   uint8_t packet_mem[32] = {0};
   phy_packet_handle * packet = (phy_packet_handle *)packet_mem;
@@ -351,13 +352,15 @@ bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t 
     data_offset += packet->length;
     //phy_packet_trace(packet);
     xSemaphoreTake(rf_chip_use, portMAX_DELAY);
-    phy_layer_send_slice_packet(packet, SOFTWARE_RETRY_RATIO);
+    send_result &= (uint8_t)phy_layer_send_slice_packet(packet, SOFTWARE_RETRY_RATIO);
     xSemaphoreGive(rf_chip_use);
     //phy_packet_trace(packet ,0);
   }
 
   SYS_RAM_TRACE();
   packet_index = (packet_index + 1) % MAX_PACKET_INDEX;
+
+  return send_result;
 }
 
 void phy_layer_event_process(void *params)

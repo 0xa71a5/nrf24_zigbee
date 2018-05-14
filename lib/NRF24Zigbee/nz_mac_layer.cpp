@@ -1,5 +1,5 @@
 #include "nz_mac_layer.h"
-
+#include "nz_phy_layer.h"
 
 #define MAC_CONFIRM_FIFO_SIZE 3
 
@@ -88,3 +88,50 @@ void mac_layer_event_process(void * params)
   }
 }
 
+
+void mcps_data_request(uint8_t src_addr_mode, uint8_t dst_addr_mode, uint16_t dst_pan_id, uint16_t dst_addr,
+  uint8_t msdu_length, uint8_t *msdu, uint8_t msdu_handle, uint8_t tx_options)
+{
+  // TODO : addr compressing
+  static uint8_t mpdu_mem[MPDU_MAX_SIZE] = {0};
+  mpdu_frame_handle *mpdu_frame = (mpdu_frame_handle *)mpdu_mem;
+  uint8_t to_send_size = 0;
+  uint8_t phy_dst[2] = {'0', 0xff};
+  uint8_t send_result = 1;
+
+  if (msdu_length > MPDU_PAYLOAD_MAX_SIZE) {
+    debug_printf("msdu length overflow\n");
+    mcps_data_confirm(msdu_handle, FRAME_TOO_LONG, millis());
+    return;
+  }
+
+  mpdu_frame->seq ++;
+  mpdu_frame->dst_pan_id = dst_pan_id;
+  mpdu_frame->dst_addr = dst_addr;
+  mpdu_frame->src_pan_id = mlme_get_request(macPANId);
+  mpdu_frame->src_addr = mlme_get_request(macShortAddress);
+
+  memcpy(mpdu_frame->payload, msdu, msdu_length);
+  to_send_size = sizeof(mpdu_frame_handle) + msdu_length;
+ 
+  send_result = phy_layer_send_raw_data(phy_dst, (uint8_t *)mpdu_frame, to_send_size);
+  if (send_result)
+    mcps_data_confirm(msdu_handle, SUCCESS, millis());
+  else
+    mcps_data_confirm(msdu_handle, TRANSACTION_EXPIRED, millis());
+
+  return;
+}
+
+
+void mcps_data_confirm(uint8_t msdu_handle, uint8_t status, uint32_t time_stamp)
+{
+   static mcps_data_confirm_handle confirm;
+
+   confirm.msdu_handle = msdu_handle;
+   confirm.status = status;
+   confirm.time_stamp = time_stamp;
+
+   mlme_send_confirm_event(confirm_type_data_confirm, &confirm);
+   debug_printf("mcps_data_confirm %u\n", status);
+}

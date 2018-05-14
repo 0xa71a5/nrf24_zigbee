@@ -11,7 +11,7 @@
 #define NWK_CONFIRM_FIFO_SIZE 3
 #define FORMATION_CONFIRM_TIMEOUT 100
 
-#define NSDU_MAX_LENGTH 100
+
 
 typedef struct __nlme_formation_confirm_handle
 {
@@ -66,13 +66,85 @@ struct NWK_PIB_attributes_handle {
 	uint8_t nwkLeaveRequestAllowed:1;
 };
 
+
+enum nwk_frame_type {
+  nwk_frame_type_data = 0,
+  nwk_frame_type_command,
+  nwk_frame_type_reserved,
+  nwk_frame_type_inter_pan,
+};
+
+enum nwk_discovery_route_type {
+  suppress_route_discovery = 0,
+  enable_route_discovery,
+};
+
+enum nwk_multicast_type {
+  unicast_or_broadcast_frame = 0,
+  multicast_frame,
+};
+
+enum nwk_soure_route_type {
+  source_route_not_present = 0,
+  source_route_present,
+};
+
+
+typedef struct __npdu_frame_control {
+  uint8_t frame_type:2;
+  uint8_t protocal_version:4;
+  uint8_t discovery_route:2;
+  uint8_t multicast_flag:1;
+  uint8_t security:1;
+  uint8_t source_route:1;
+  uint8_t dst_use_ieee_addr:1;
+  uint8_t src_use_ieee_addr:1;
+  uint8_t reserved:3;
+} npdu_frame_control;
+
+typedef struct __npdu_frame_route {
+  uint16_t dest_addr;
+  uint16_t src_addr;
+  uint8_t radius;
+  uint8_t seq;
+  uint8_t multicast_control;
+} npdu_frame_route;
+
+typedef struct __npdu_frame_wrapper_handle {
+  npdu_frame_control frame_control;
+  npdu_frame_route   frame_route;
+  uint8_t frame_data[0];
+} npdu_frame_wrapper_handle;
+
+typedef struct __npdu_frame_handle {
+  npdu_frame_control frame_control;
+  uint16_t dst_addr;
+  uint16_t src_addr;
+  uint8_t radius;
+  uint8_t seq;
+  uint8_t multicast_control;
+  uint8_t payload[0];
+} npdu_frame_handle;
+
+
+typedef struct __nlde_data_confirm_handle {
+	uint8_t status;
+	uint8_t nsdu_handle;
+	uint32_t tx_time;
+} nlde_data_confirm_handle;
+
 extern QueueHandle_t nwk_confirm_fifo;
 
-struct NWK_PIB_attributes_handle NWK_PIB_attributes;
+extern struct NWK_PIB_attributes_handle NWK_PIB_attributes;
 
 #define nlme_set_request(perp_name, value) NWK_PIB_attributes.perp_name = value
 /* We dont use set_confirm , cause this is some kind a waste */
 #define nlme_get_request(perp_name) NWK_PIB_attributes.perp_name
+
+#define NPDU_MAX_SIZE (MPDU_MAX_SIZE - 2)
+#define NPDU_FRAME_OVERHEAD_SIZE sizeof(npdu_frame_handle)
+#define NPDU_PAYLOAD_MAX_SIZE (NPDU_MAX_SIZE - NPDU_FRAME_OVERHEAD_SIZE)
+
 
 void nwk_layer_init();
 void nlme_send_confirm_event(uint8_t confirm_type, void *ptr);
@@ -80,6 +152,8 @@ void nlme_network_formation_request();
 void nlme_network_formation_confirm(uint8_t status);
 void nwk_layer_event_process(void * params);
 void nlde_data_confirm(uint8_t status, uint8_t nsdu_handle, uint32_t tx_time);
-
+void nlde_data_request(uint16_t dst_addr, uint8_t nsdu_length, uint8_t *nsdu, uint8_t nsdu_handle, uint8_t broadcast_radius,
+	uint8_t discovery_route, uint8_t security_enable);
+void nlde_data_confirm(uint8_t status, uint8_t npdu_handle, uint32_t tx_time);
 
 #endif

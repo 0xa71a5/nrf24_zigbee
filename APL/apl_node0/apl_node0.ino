@@ -1,9 +1,9 @@
+#include <FreeRTOS_AVR.h>
 #include <NRF24Zigbee.h>
 #include <nz_phy_layer.h>
 #include <nz_mac_layer.h>
 #include <nz_nwk_layer.h>
 #include <nz_apl_layer.h>
-#include <FreeRTOS_AVR.h>
 
 TaskHandle_t task_rx_server_handle;
 TaskHandle_t task_rx_get_data_handle;
@@ -91,7 +91,6 @@ void setup()
   xTaskCreate(send_packet_test, "tx_sv", 350, 
     NULL, tskIDLE_PRIORITY + 2, &task_tx_server_handle);//Used 327 byte
 
-  debug_printf("size of MAC_PIB_attributes = %u\n", sizeof(MAC_PIB_attributes));
   debug_printf("Zigbee network starts!\n");
   vTaskStartScheduler();
 }

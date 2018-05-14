@@ -56,9 +56,7 @@ void apl_layer_test(void *params)
     else {
       debug_printf("formation failed!\n");
     }
-
   }
-
 }
 
 
@@ -91,7 +89,6 @@ void setup()
   xTaskCreate(send_packet_test, "tx_sv", 350, 
     NULL, tskIDLE_PRIORITY + 2, &task_tx_server_handle);//Used 327 byte
 
-  debug_printf("size of MAC_PIB_attributes = %u\n", sizeof(MAC_PIB_attributes));
   debug_printf("Zigbee network starts!\n");
   vTaskStartScheduler();
 }
