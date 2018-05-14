@@ -31,4 +31,20 @@ bool signal_wait(uint8_t * signal, uint16_t delay_time = 100);
 #define INVALID_GTS				15
 #define NO_ACK					16
 
+#define DEFAULT_LOGICAL_CHANNEL 3
+
+#define DEFAULT_PANID 0x07
+
+#define DEFAULT_BROADCAST_ADDR 0xff00
+#define DEFAULT_COORD_NET_ADDR 0x0100
+#define DEFAULT_DEVICE_NET_ADDR 0x0200
+
+enum confirm_types {
+	confirm_type_scan = 0,
+  	confirm_type_set,
+  	confirm_type_start,
+  	confirm_type_formation,
+  	confirm_type_data_confirm,
+};
+
 #endif

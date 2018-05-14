@@ -2,14 +2,18 @@
 #include "nz_common.h"
 
 QueueHandle_t nwk_confirm_fifo;
+QueueHandle_t nwk_indication_fifo;
 
 volatile uint8_t scan_confirm_event_flag = 0;
 volatile uint8_t start_confirm_event_flag = 0;
+volatile uint8_t data_confirm_event_flag = 0;
+
 struct NWK_PIB_attributes_handle NWK_PIB_attributes;
 
 void nwk_layer_init()
 {
   nwk_confirm_fifo = xQueueCreate(NWK_CONFIRM_FIFO_SIZE, sizeof(confirm_event));
+  nwk_indication_fifo = xQueueCreate(NWK_INDICATION_FIFO_SIZE, sizeof(nwk_indication));
 }
 
 void nlme_send_confirm_event(uint8_t confirm_type, void *ptr)
@@ -22,7 +26,7 @@ void nlme_send_confirm_event(uint8_t confirm_type, void *ptr)
 }
 
 /* Format a new network request */
-void nlme_network_formation_request()
+void nlme_network_formation_request(uint8_t scan_channels, uint8_t scan_duration, uint8_t battery_life_ext)
 {
   uint32_t notify_value = 0;
   uint32_t record_time = 0;
@@ -32,7 +36,7 @@ void nlme_network_formation_request()
   // do a ed scan and wait for result
   debug_printf("Send ed_scan request to mac\n");
 
-  mlme_scan_request(ed_scan, 0, 0, 0);
+  mlme_scan_request(ed_scan, scan_channels, scan_duration, 0);
 
   if (signal_wait(&scan_confirm_event_flag, 100))
     debug_printf("Got ed_scan result\n");
@@ -40,7 +44,7 @@ void nlme_network_formation_request()
     goto fail_exit;
   }
 
-  mlme_scan_request(active_scan, 0, 0, 0);
+  mlme_scan_request(active_scan, scan_channels, scan_duration, 0);
 
   if (signal_wait(&scan_confirm_event_flag, 100))
     debug_printf("Got active_scan result\n");
@@ -48,12 +52,17 @@ void nlme_network_formation_request()
     goto fail_exit;
   }
 
-  mlme_set_request(macShortAddress, 0x0034);
+  /* Set network address and mac address */
+  nlme_set_request(nwkNetworkAddress, DEFAULT_COORD_NET_ADDR);
+  mlme_set_request(macShortAddress, DEFAULT_COORD_NET_ADDR);
+
+  /* Set network PAN id and mac PAN id */
+  nlme_set_request(nwkPANID, DEFAULT_PANID);
 
   debug_printf("Send start request to mac\n");
 
   /* macPANId, logicalChannel, PANCoordinator ,macBattLifeExt*/
-  mlme_start_request(1, 12, 1, 0);
+  mlme_start_request(DEFAULT_PANID, DEFAULT_LOGICAL_CHANNEL, 1, battery_life_ext);
 
   if (signal_wait(&start_confirm_event_flag, 100))
     debug_printf("Got start result\n");
@@ -66,7 +75,7 @@ void nlme_network_formation_request()
   return;
 
   fail_exit:
-  debug_printf("fail_exit\n");
+  debug_printf("formation fail_exit\n");
   nlme_network_formation_confirm(STARTUP_FAILURE);
 }
 
@@ -83,10 +92,12 @@ void nlme_network_formation_confirm(uint8_t status)
 void nwk_layer_event_process(void * params)
 {
   confirm_event event;
+  nwk_indication indication;
 
   while (1) {
-    if (xQueueReceive(nwk_confirm_fifo, &event, pdMS_TO_TICKS(500))) {
-      debug_printf("nwk_sv:recv from fifo :type=%u addr=0x%04X\n", 
+    /* Handle confirm from mac layer */
+    if (xQueueReceive(nwk_confirm_fifo, &event, 100)) {
+      debug_printf("nwk_sv:recv confirm :type=%u addr=0x%04X\n", 
         event.confirm_type, event.confirm_ptr);
 
       /* We got confirm signal from mac layer */
@@ -102,7 +113,17 @@ void nwk_layer_event_process(void * params)
         case confirm_type_set:
 
         break;
+
+        case confirm_type_data_confirm:
+          data_confirm_event_flag = 1;
+        break;
       }
+    }
+
+    /* Handle indication from mac layer */
+    if (xQueueReceive(nwk_indication_fifo, &indication, 100)) {
+      debug_printf("nwk_sv:recv indication,datasize=%u\n", indication.length);
+      //TODO : send indication to apl layer
     }
 
     vTaskDelay(1); 
@@ -120,7 +141,7 @@ void nwk_layer_event_process(void * params)
  * @param security_mode 	:true->take security actions
  */
 void nlde_data_request(uint16_t dst_addr, uint8_t nsdu_length, uint8_t *nsdu, uint8_t nsdu_handle, uint8_t broadcast_radius,
-	uint8_t discovery_route, uint8_t security_enable)
+	uint8_t discovery_route)
 {
   static uint8_t npdu_mem[NPDU_MAX_SIZE] = {0};
   npdu_frame_handle * npdu_frame = (npdu_frame_handle *)npdu_mem;
@@ -142,6 +163,15 @@ void nlde_data_request(uint16_t dst_addr, uint8_t nsdu_length, uint8_t *nsdu, ui
   memcpy(npdu_frame->payload, nsdu, nsdu_length);
 
   to_send_size = sizeof(npdu_frame_handle) + nsdu_length;
+  mcps_data_request(0, 0, DEFAULT_PANID, dst_addr, to_send_size, (uint8_t *)npdu_frame, nsdu_handle, 0);
+
+  if (signal_wait(&data_confirm_event_flag, 500)) {
+    /* TODO: here we shall read confirm message from mac and retransfer to apl */
+    nlde_data_confirm(SUCCESS, nsdu_handle, millis());
+  }
+  else {
+    nlde_data_confirm(TRANSACTION_EXPIRED, nsdu_handle, millis());
+  }
 }
 
 
@@ -155,4 +185,11 @@ void nlde_data_confirm(uint8_t status, uint8_t npdu_handle, uint32_t tx_time)
 
   nlme_send_confirm_event(confirm_type_data_confirm, &confirm);
   debug_printf("nlde_data_confirm %u\n", status);
+}
+
+/* Dont use link quality and security */
+void nlde_data_indication(uint8_t dst_addr_mode, uint16_t dst_addr, uint16_t src_addr, 
+  uint8_t nsdu_length, uint8_t *nsdu, uint32_t rx_time)
+{
+
 }

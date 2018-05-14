@@ -3,7 +3,6 @@
 
 #include "NRF24Zigbee.h"
 #include <FreeRTOS_AVR.h>
-#include "nz_nwk_layer.h"
 #include "nz_common.h"
 
 //MLME-SCAN
@@ -35,11 +34,13 @@ typedef struct __mlme_start_confirm_handle
 	uint8_t status;
 } mlme_start_confirm_handle;
 
-enum mac_confirm_type_enum {
-  confirm_type_scan = 0,
-  confirm_type_set,
-  confirm_type_start,
-};
+typedef struct __mcps_data_confirm_handle {
+  uint8_t status;
+  uint8_t msdu_handle;
+  uint32_t time_stamp;
+} mcps_data_confirm_handle;
+
+
 
 /* Currently, size of MAC_PIB_attributes = 24 */
 struct MAC_PIB_attributes_handle {
@@ -98,14 +99,7 @@ extern QueueHandle_t mac_confirm_fifo;
 /* We dont use set_confirm , cause this is some kind a waste */
 #define mlme_get_request(perp_name) MAC_PIB_attributes.perp_name
 
-#define MPDU_MAX_SIZE 128
-#define MPDU_PAYLOAD_MAX_SIZE (MPDU_MAX_SIZE - sizeof(mpdu_frame_handle))
 
-typedef struct __mcps_data_confirm_handle {
-  uint8_t status;
-  uint8_t msdu_handle;
-  uint32_t time_stamp;
-} mcps_data_confirm_handle;
 
 
 enum mac_frame_type {
@@ -154,6 +148,9 @@ typedef struct __mpdu_frame_handle {
 } mpdu_frame_handle;
 
 
+#define MPDU_MAX_SIZE 128
+#define MPDU_PAYLOAD_MAX_SIZE (MPDU_MAX_SIZE - sizeof(mpdu_frame_handle))
+
 void mac_layer_init();
 
 void mlme_scan_request(uint8_t scan_type=0, uint8_t scan_channels=0, uint8_t scan_duration=0, 
@@ -173,5 +170,8 @@ void mcps_data_request(uint8_t src_addr_mode, uint8_t dst_addr_mode, uint16_t ds
   uint8_t msdu_length, uint8_t *msdu, uint8_t msdu_handle, uint8_t tx_options);
 
 void mcps_data_confirm(uint8_t msdu_handle, uint8_t status, uint32_t time_stamp);
+
+void mcps_data_indication(uint8_t src_addr_mode, uint16_t src_pan_id, uint16_t src_addr, uint8_t dst_addr_mode,
+  uint16_t dst_pan_id, uint16_t dst_addr, uint8_t msdu_length, uint8_t *msdu, uint8_t dsn, uint32_t time_stamp);
 
 #endif

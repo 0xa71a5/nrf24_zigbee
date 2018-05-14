@@ -9,7 +9,21 @@
 
 #define STARTUP_FAILURE 20
 #define NWK_CONFIRM_FIFO_SIZE 3
+#define NWK_INDICATION_FIFO_SIZE 3
 #define FORMATION_CONFIRM_TIMEOUT 100
+
+
+extern QueueHandle_t nwk_confirm_fifo;
+extern QueueHandle_t nwk_indication_fifo;
+
+
+#define nlme_set_request(perp_name, value) NWK_PIB_attributes.perp_name = value
+/* We dont use set_confirm , cause this is some kind a waste */
+#define nlme_get_request(perp_name) NWK_PIB_attributes.perp_name
+
+#define NPDU_MAX_SIZE  MPDU_PAYLOAD_MAX_SIZE
+#define NPDU_FRAME_OVERHEAD_SIZE sizeof(npdu_frame_handle)
+#define NPDU_PAYLOAD_MAX_SIZE (NPDU_MAX_SIZE - NPDU_FRAME_OVERHEAD_SIZE)
 
 
 
@@ -18,10 +32,8 @@ typedef struct __nlme_formation_confirm_handle
 	uint8_t status;
 } nlme_formation_confirm_handle;
 
-enum nwk_confirm_type_enum {
-  confirm_type_formation = 0,
-  confirm_type_data_confirm,
-};
+extern struct NWK_PIB_attributes_handle NWK_PIB_attributes;
+
 
 struct NWK_PIB_attributes_handle {
 	uint8_t nwkMaxBroadcastRetries:3;//range 0 - 5
@@ -133,27 +145,22 @@ typedef struct __nlde_data_confirm_handle {
 	uint32_t tx_time;
 } nlde_data_confirm_handle;
 
-extern QueueHandle_t nwk_confirm_fifo;
-
-extern struct NWK_PIB_attributes_handle NWK_PIB_attributes;
-
-#define nlme_set_request(perp_name, value) NWK_PIB_attributes.perp_name = value
-/* We dont use set_confirm , cause this is some kind a waste */
-#define nlme_get_request(perp_name) NWK_PIB_attributes.perp_name
-
-#define NPDU_MAX_SIZE (MPDU_MAX_SIZE - 2)
-#define NPDU_FRAME_OVERHEAD_SIZE sizeof(npdu_frame_handle)
-#define NPDU_PAYLOAD_MAX_SIZE (NPDU_MAX_SIZE - NPDU_FRAME_OVERHEAD_SIZE)
-
+typedef struct __nwk_indicaiton_handle
+{
+	uint8_t length;
+	uint8_t data[NPDU_MAX_SIZE];
+} nwk_indication;
 
 void nwk_layer_init();
 void nlme_send_confirm_event(uint8_t confirm_type, void *ptr);
-void nlme_network_formation_request();
+void nlme_network_formation_request(uint8_t scan_channels, uint8_t scan_duration, uint8_t battery_life_ext);
 void nlme_network_formation_confirm(uint8_t status);
 void nwk_layer_event_process(void * params);
 void nlde_data_confirm(uint8_t status, uint8_t nsdu_handle, uint32_t tx_time);
 void nlde_data_request(uint16_t dst_addr, uint8_t nsdu_length, uint8_t *nsdu, uint8_t nsdu_handle, uint8_t broadcast_radius,
-	uint8_t discovery_route, uint8_t security_enable);
+	uint8_t discovery_route);
 void nlde_data_confirm(uint8_t status, uint8_t npdu_handle, uint32_t tx_time);
+
+
 
 #endif

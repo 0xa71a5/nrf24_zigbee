@@ -1,6 +1,7 @@
 #include "nz_phy_layer.h"
 #include "NRF24Zigbee.h"
 #include <FreeRTOS_AVR.h>
+#include "nz_common.h"
 
 static rx_node_handle rx_fifo_mem[MAX_FIFO_SIZE];/* This consumes 528 bytes */
 static rx_fifo_handle fifo_instance;
@@ -12,15 +13,20 @@ static uint8_t phy_layer_src_addr[2];
 static SemaphoreHandle_t rf_chip_use;
 static SemaphoreHandle_t phy_rx_fifo_sem;
 
-bool phy_layer_init(uint8_t *src_addr)
+//bool phy_layer_init(uint8_t *src_addr)
+bool phy_layer_init(uint16_t src_addr_u16)
 {
+  uint8_t src_addr[2];
   uint8_t mac_addr[5] = {PUBLIC_MAC_ADDR_0, PUBLIC_MAC_ADDR_1, PUBLIC_MAC_ADDR_2, 'z', 'z'};
   nrf_gpio_init(CE_PIN, CSN_PIN); //Set ce pin and csn pin
   SYS_RAM_TRACE();
-  //nrf_set_tx_addr((uint8_t *)"mac01");
+
+  *(uint16_t *)src_addr = src_addr_u16;
+
   SRC_ADDR_COPY(phy_layer_src_addr, src_addr);
   mac_addr[3] = src_addr[0];
   mac_addr[4] = src_addr[1];
+
   nrf_set_rx_addr((uint8_t *)mac_addr);
   nrf_set_broadcast_addr(BROADCAST_ADDR_BYTE0);
   phy_layer_set_src_addr(phy_layer_src_addr);
@@ -309,10 +315,11 @@ void phy_layer_set_dst_addr(uint8_t *addr)
 }
 
 
-bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t length)
+bool phy_layer_send_raw_data(uint16_t dst_mac_addr_u16, uint8_t *raw_data, uint32_t length)
 {
   uint8_t compare_flag = 0;
   uint8_t i;
+  uint8_t dst_mac_addr[2];
   uint8_t send_result = 1;
   static uint8_t packet_index = 0;
   uint8_t packet_mem[32] = {0};
@@ -320,6 +327,7 @@ bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t 
   uint8_t packet_send_status = 0x00;
   uint8_t *data_offset = raw_data; /* Offset ptr for raw_data*/
 
+  *(uint16_t *)dst_mac_addr = dst_mac_addr_u16;
   SYS_RAM_TRACE();
   packet->type = MESSAGE_PACKET;
   packet->packet_index = packet_index;
@@ -365,20 +373,8 @@ bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t 
 
 void phy_layer_event_process(void *params)
 {
-  uint8_t data_length;
-  uint8_t data[128];
-  TickType_t last_wake_time;
-
   while (1) {
     phy_layer_listener();
-
-    if ((data_length = phy_layer_fifo_top_node_size()) > 0) {
-      data_length = phy_layer_fifo_pop_data(data);
-      debug_printf("<=== read_size=%u crc_raw=0x%02X crc_calc=0x%02X \n\n", data_length, data[data_length-1], crc_calculate(data, data_length-1));
-    /* TODO: Indication */
-      
-    }
-
     //last_wake_time = xTaskGetTickCount();
     //vTaskDelayUntil(&last_wake_time, 357);
     vTaskDelay(1);

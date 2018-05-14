@@ -10,7 +10,7 @@
 
 extern QueueHandle_t apl_confirm_fifo;
 extern volatile uint8_t formation_confirm_event_flag;
-
+extern volatile uint8_t apl_data_confirm_event_flag;
 
 void apl_layer_init();
 void apl_layer_event_process(void *params);

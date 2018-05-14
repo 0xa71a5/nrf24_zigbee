@@ -23,7 +23,8 @@ static void send_packet_test(void *params)
       data[i] = random(256);
     data[test_size - 1] = crc_calculate(data, test_size-1);
     debug_printf("===> Send to 0 0xff,crc = 0x%02X\n", data[test_size-1]);
-    uint8_t dst[2] = {'0', '0'};
+    //uint8_t dst[2] = {'0', '0'};
+    uint16_t dst = 0xff00;
     uint32_t record_time = micros();
     
     phy_layer_send_raw_data(dst, data, test_size);
@@ -31,7 +32,7 @@ static void send_packet_test(void *params)
     record_time = micros() - record_time;
     debug_printf("Take %u s to send\n\n", record_time);
     
-    vTaskDelay(700);
+    vTaskDelay(1002);
   }
 }
 
@@ -40,22 +41,30 @@ static void send_packet_test(void *params)
 void apl_layer_test(void *params)
 {
   uint32_t record_time;
+  #define apl_data_length 45
+  static uint8_t apl_data[apl_data_length];
+
+  uint16_t dst_addr = 0x0100;
+  uint8_t handle = random(255);
+
   debug_printf("Enter apl_layer_test\n");
 
+  /* only coord needs to formation */
+  //debug_printf("apl layer call nlme_network_formation_request\n");
+  //nlme_network_formation_request(0, 100, 0);
 
   while (1) {
     vTaskDelay(933);
 
-    debug_printf("apl layer call nlme_network_formation_request\n");
-    nlme_network_formation_request();
+    debug_printf("call nlde_data_request\n");
+    sprintf(apl_data, "Network time broadcast %u", millis());
+    nlde_data_request(dst_addr, apl_data_length, apl_data, handle, 0, 0);
 
-
-    if (signal_wait(&formation_confirm_event_flag, 100)) {
-      debug_printf("formation success\n");
-    }
-    else {
-      debug_printf("formation failed!\n");
-    }
+    if (signal_wait(&apl_data_confirm_event_flag, 500))
+      debug_printf("Got data request confirm\n");
+    else
+      debug_printf("Dont get date request confirm in limit time\n");
+    debug_printf("\n");
   }
 }
 
@@ -65,7 +74,7 @@ void setup()
   Serial.begin(2000000);
   printf_begin();
   debug_printf("Begin config!\n");
-  phy_layer_init("01");
+  phy_layer_init(0200);
   mac_layer_init();
   nwk_layer_init();
   apl_layer_init();
@@ -86,8 +95,8 @@ void setup()
   xTaskCreate(apl_layer_test, "apl_test", 400,
     NULL, tskIDLE_PRIORITY + 2, NULL);
 
-  xTaskCreate(send_packet_test, "tx_sv", 350, 
-    NULL, tskIDLE_PRIORITY + 2, &task_tx_server_handle);//Used 327 byte
+  //xTaskCreate(send_packet_test, "tx_sv", 350, 
+    //NULL, tskIDLE_PRIORITY + 2, &task_tx_server_handle);//Used 327 byte
 
   debug_printf("Zigbee network starts!\n");
   vTaskStartScheduler();
