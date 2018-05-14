@@ -214,7 +214,6 @@ void phy_layer_listener(void)
             uint8_t packet_index = packet->packet_index;
 
             phy_layer_test_and_copy(packet, phy_rx_node);
-
             phy_rx_node->node_status = NODE_VALID;
             phy_rx_node->length = (packet->slice_size-1) * MAX_PACKET_DATA_SIZE + packet->length;
           }

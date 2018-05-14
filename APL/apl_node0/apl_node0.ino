@@ -40,6 +40,8 @@ static void send_packet_test(void *params)
 void apl_layer_test(void *params)
 {
   uint32_t record_time;
+  static apl_indication indication;
+
   debug_printf("Enter apl_layer_test\n");
 
   debug_printf("apl layer call nlme_network_formation_request\n");
@@ -57,9 +59,11 @@ void apl_layer_test(void *params)
   }
 
   while (1) {
-    debug_printf("apl layer heart beat\n");
+    if (xQueueReceive(apl_indication_fifo, &indication, 1000)) {
+      debug_printf("app:recv msg,data_size=%u data=[%s] \n\n", indication.length, indication.data);
+    }
     // TODO : APL layer send and receive data 
-    vTaskDelay(933);
+    vTaskDelay(7);
   }
 
 }

@@ -89,10 +89,16 @@ void nlme_network_formation_confirm(uint8_t status)
   debug_printf("nlme_network_formation_confirm %u\n", status);
 }
 
+static mlme_scan_confirm_handle  *scan_confirm_ptr;
+static mlme_start_confirm_handle *start_confirm_ptr;
+static mcps_data_confirm_handle  *data_confirm_ptr;
+
 void nwk_layer_event_process(void * params)
 {
   confirm_event event;
-  nwk_indication indication;
+  static nwk_indication indication;
+  npdu_frame_handle * npdu_frame = (npdu_frame_handle *)indication.data;
+  uint8_t payload_size = 0;
 
   while (1) {
     /* Handle confirm from mac layer */
@@ -104,10 +110,12 @@ void nwk_layer_event_process(void * params)
       switch (event.confirm_type) {
         case confirm_type_scan:
           scan_confirm_event_flag = 1;
+          scan_confirm_ptr = (mlme_scan_confirm_handle *)event.confirm_ptr;
         break;
 
         case confirm_type_start:
           start_confirm_event_flag = 1;
+          start_confirm_ptr = (mlme_start_confirm_handle *)event.confirm_ptr;
         break;
 
         case confirm_type_set:
@@ -116,13 +124,18 @@ void nwk_layer_event_process(void * params)
 
         case confirm_type_data_confirm:
           data_confirm_event_flag = 1;
+          data_confirm_ptr = (mcps_data_confirm_handle *)event.confirm_ptr;
         break;
       }
     }
 
     /* Handle indication from mac layer */
     if (xQueueReceive(nwk_indication_fifo, &indication, 100)) {
+      payload_size = indication.length - sizeof(npdu_frame_handle);
       debug_printf("nwk_sv:recv indication,datasize=%u\n", indication.length);
+
+      nlde_data_indication(npdu_frame->frame_control.dst_use_ieee_addr, npdu_frame->dst_addr, npdu_frame->src_addr, 
+        payload_size, npdu_frame->payload, millis());
       //TODO : send indication to apl layer
     }
 
@@ -130,6 +143,22 @@ void nwk_layer_event_process(void * params)
   }
 }
 
+/* Dont use link quality and security */
+void nlde_data_indication(uint8_t dst_addr_mode, uint16_t dst_addr, uint16_t src_addr, 
+  uint8_t nsdu_length, uint8_t *nsdu, uint32_t rx_time)
+{
+  apl_indication indication;
+
+  debug_printf("nwk data ind: dst=0x%04X src=0x%04X len=%u \n", dst_addr, src_addr, nsdu_length);
+  if (dst_addr == nlme_get_request(nwkNetworkAddress)) {
+    indication.length = nsdu_length;
+    memcpy(indication.data, nsdu, nsdu_length);
+    xQueueSendToBack(apl_indication_fifo, &indication, 500);
+  }
+  else {
+    debug_printf("nwk data ind: dst addr not equal to mine(0x%04X), drop it\n", nlme_get_request(nwkNetworkAddress));
+  }
+}
 
 /*
  * @param dst_addr 			:dstination device network 16bit addr
@@ -167,7 +196,7 @@ void nlde_data_request(uint16_t dst_addr, uint8_t nsdu_length, uint8_t *nsdu, ui
 
   if (signal_wait(&data_confirm_event_flag, 500)) {
     /* TODO: here we shall read confirm message from mac and retransfer to apl */
-    nlde_data_confirm(SUCCESS, nsdu_handle, millis());
+    nlde_data_confirm(data_confirm_ptr->status, data_confirm_ptr->msdu_handle, data_confirm_ptr->time_stamp);
   }
   else {
     nlde_data_confirm(TRANSACTION_EXPIRED, nsdu_handle, millis());
@@ -184,12 +213,6 @@ void nlde_data_confirm(uint8_t status, uint8_t npdu_handle, uint32_t tx_time)
   confirm.tx_time = tx_time;
 
   nlme_send_confirm_event(confirm_type_data_confirm, &confirm);
-  debug_printf("nlde_data_confirm %u\n", status);
+  debug_printf("nlde_data_confirm %u 0x%04X\n", status, &confirm);
 }
 
-/* Dont use link quality and security */
-void nlde_data_indication(uint8_t dst_addr_mode, uint16_t dst_addr, uint16_t src_addr, 
-  uint8_t nsdu_length, uint8_t *nsdu, uint32_t rx_time)
-{
-
-}

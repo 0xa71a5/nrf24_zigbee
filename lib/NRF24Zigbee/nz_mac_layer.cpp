@@ -81,7 +81,7 @@ void mac_layer_event_process(void * params)
   static uint8_t data[128];
   mpdu_frame_handle * mpdu_frame = (mpdu_frame_handle *)data;
   uint8_t data_length;
-  uint8_t msdu_length = 0;
+  uint8_t payload_size = 0;
 
   debug_printf("Enter mac_layer_server\n");
   while (1) {
@@ -92,13 +92,13 @@ void mac_layer_event_process(void * params)
 
     if ((data_length = phy_layer_fifo_top_node_size()) > 0) {
       data_length = phy_layer_fifo_pop_data(data);
-      msdu_length = data_length - sizeof(mpdu_frame_handle);
+      payload_size = data_length - sizeof(mpdu_frame_handle);
 
-      debug_printf("<=== mac_sv data_size=%u msdu_size=%u \n\n", data_length, msdu_length);
+      debug_printf("<=== mac_sv data_size=%u msdu_size=%u \n", data_length, payload_size);
       // TODO : DSN
       mcps_data_indication(mpdu_frame->frame_control.src_addr_mode, mpdu_frame->src_pan_id, mpdu_frame->src_addr,
         mpdu_frame->frame_control.dst_addr_mode, mpdu_frame->dst_pan_id, mpdu_frame->dst_addr,
-        msdu_length, mpdu_frame->payload, 0, millis());
+        payload_size, mpdu_frame->payload, 0, millis());
     }
 
     vTaskDelay(1);

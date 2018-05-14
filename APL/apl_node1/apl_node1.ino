@@ -37,6 +37,7 @@ static void send_packet_test(void *params)
 }
 
 
+extern nlme_formation_confirm_handle *data_confirm_ptr;
 
 void apl_layer_test(void *params)
 {
@@ -54,14 +55,18 @@ void apl_layer_test(void *params)
   //nlme_network_formation_request(0, 100, 0);
 
   while (1) {
-    vTaskDelay(933);
+    vTaskDelay(500);
 
     debug_printf("call nlde_data_request\n");
     sprintf(apl_data, "Network time broadcast %u", millis());
     nlde_data_request(dst_addr, apl_data_length, apl_data, handle, 0, 0);
 
-    if (signal_wait(&apl_data_confirm_event_flag, 500))
-      debug_printf("Got data request confirm\n");
+    if (signal_wait(&apl_data_confirm_event_flag, 500)) {
+      if (!data_confirm_ptr->status)
+        debug_printf("Got data request confirm\n");
+      else
+        debug_printf("Got data confirm ,but it says send failed\n");
+    }
     else
       debug_printf("Dont get date request confirm in limit time\n");
     debug_printf("\n");

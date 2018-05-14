@@ -102,55 +102,6 @@ extern QueueHandle_t mac_confirm_fifo;
 
 
 
-enum mac_frame_type {
-  mac_frame_type_beacon = 0,
-  mac_frame_type_data,
-  mac_frame_type_ack,
-  mac_frame_type_command,
-};
-
-enum mac_addr_mode {
-  mac_addr_no_present = 0,
-  mac_addr_16bits = 2,
-  mac_addr_64bits = 3,
-};
-
-enum mac_frame_version {
-  mac_version_802_15_4_2003 = 0,
-  mac_version_802_15_4 = 1,
-};
-
-typedef struct __mpdu_frame_control {
-  uint8_t frame_type:3;
-  uint8_t security_enable:1;
-  uint8_t frame_pending:1;
-  uint8_t ack_request:1;
-  uint8_t pan_id_compression:1;
-  uint8_t reserved:3;
-  uint8_t dst_addr_mode:2;
-  uint8_t frame_version:2;
-  uint8_t src_addr_mode:2;
-} mpdu_frame_control;
-
-typedef struct __mpdu_addressing_field {
-  uint8_t a;
-} mpdu_addressing_field;
-
-typedef struct __mpdu_frame_handle {
-  uint16_t crc;/* This is not like protocal */
-  mpdu_frame_control frame_control;
-  uint8_t seq;
-  uint16_t dst_pan_id;
-  uint16_t dst_addr;
-  uint16_t src_pan_id;
-  uint16_t src_addr;
-  uint8_t payload[0];
-} mpdu_frame_handle;
-
-
-#define MPDU_MAX_SIZE 128
-#define MPDU_PAYLOAD_MAX_SIZE (MPDU_MAX_SIZE - sizeof(mpdu_frame_handle))
-
 void mac_layer_init();
 
 void mlme_scan_request(uint8_t scan_type=0, uint8_t scan_channels=0, uint8_t scan_duration=0, 

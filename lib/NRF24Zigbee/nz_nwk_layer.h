@@ -3,9 +3,9 @@
 
 #include "NRF24Zigbee.h"
 #include <FreeRTOS_AVR.h>
+#include "nz_common.h"
 #include "nz_apl_layer.h"
 #include "nz_mac_layer.h"
-#include "nz_common.h"
 
 #define STARTUP_FAILURE 20
 #define NWK_CONFIRM_FIFO_SIZE 3
@@ -21,9 +21,7 @@ extern QueueHandle_t nwk_indication_fifo;
 /* We dont use set_confirm , cause this is some kind a waste */
 #define nlme_get_request(perp_name) NWK_PIB_attributes.perp_name
 
-#define NPDU_MAX_SIZE  MPDU_PAYLOAD_MAX_SIZE
-#define NPDU_FRAME_OVERHEAD_SIZE sizeof(npdu_frame_handle)
-#define NPDU_PAYLOAD_MAX_SIZE (NPDU_MAX_SIZE - NPDU_FRAME_OVERHEAD_SIZE)
+
 
 
 
@@ -102,42 +100,6 @@ enum nwk_soure_route_type {
 };
 
 
-typedef struct __npdu_frame_control {
-  uint8_t frame_type:2;
-  uint8_t protocal_version:4;
-  uint8_t discovery_route:2;
-  uint8_t multicast_flag:1;
-  uint8_t security:1;
-  uint8_t source_route:1;
-  uint8_t dst_use_ieee_addr:1;
-  uint8_t src_use_ieee_addr:1;
-  uint8_t reserved:3;
-} npdu_frame_control;
-
-typedef struct __npdu_frame_route {
-  uint16_t dest_addr;
-  uint16_t src_addr;
-  uint8_t radius;
-  uint8_t seq;
-  uint8_t multicast_control;
-} npdu_frame_route;
-
-typedef struct __npdu_frame_wrapper_handle {
-  npdu_frame_control frame_control;
-  npdu_frame_route   frame_route;
-  uint8_t frame_data[0];
-} npdu_frame_wrapper_handle;
-
-typedef struct __npdu_frame_handle {
-  npdu_frame_control frame_control;
-  uint16_t dst_addr;
-  uint16_t src_addr;
-  uint8_t radius;
-  uint8_t seq;
-  uint8_t multicast_control;
-  uint8_t payload[0];
-} npdu_frame_handle;
-
 
 typedef struct __nlde_data_confirm_handle {
 	uint8_t status;
@@ -160,7 +122,8 @@ void nlde_data_confirm(uint8_t status, uint8_t nsdu_handle, uint32_t tx_time);
 void nlde_data_request(uint16_t dst_addr, uint8_t nsdu_length, uint8_t *nsdu, uint8_t nsdu_handle, uint8_t broadcast_radius,
 	uint8_t discovery_route);
 void nlde_data_confirm(uint8_t status, uint8_t npdu_handle, uint32_t tx_time);
-
+void nlde_data_indication(uint8_t dst_addr_mode, uint16_t dst_addr, uint16_t src_addr, 
+  uint8_t nsdu_length, uint8_t *nsdu, uint32_t rx_time);
 
 
 #endif
