@@ -30,8 +30,11 @@ typedef struct __nlme_formation_confirm_handle
 	uint8_t status;
 } nlme_formation_confirm_handle;
 
+extern nlme_formation_confirm_handle *apl_data_confirm_ptr;
+
 extern struct NWK_PIB_attributes_handle NWK_PIB_attributes;
 
+extern event_fifo_handle nwk_descriptors_fifo;
 
 struct NWK_PIB_attributes_handle {
 	uint8_t nwkMaxBroadcastRetries:3;//range 0 - 5

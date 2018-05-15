@@ -36,7 +36,7 @@ bool signal_wait(uint8_t * signal, uint16_t delay_time = 100);
 #define DEFAULT_PANID 0x07
 
 #define DEFAULT_BROADCAST_ADDR 0xff00
-#define DEFAULT_COORD_NET_ADDR 0x0100
+#define DEFAULT_COORD_NET_ADDR 0x0000
 #define DEFAULT_DEVICE_NET_ADDR 0x0200
 
 enum confirm_types {

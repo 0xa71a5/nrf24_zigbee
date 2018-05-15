@@ -74,6 +74,43 @@ typedef struct __pending_addr_list {
   uint16_t addr[0];
 } pending_addr_list;
 
+typedef struct __mac_beacon_payload_handle {
+  uint8_t protocal_id:8;
+  uint8_t stack_profile:4;
+  uint8_t nwk_protocal_version:4;
+  uint8_t reserved:2;
+  uint8_t router_capacity:1;
+  uint8_t device_depth:4;
+  uint8_t end_device_capacity:1;
+  uint8_t nwk_extended_panid[8];
+  //uint8_t tx_offset[3];//not used
+  uint8_t nwk_update_id;
+} mac_beacon_payload_handle;
+
+typedef struct __neighbour_table_handle {
+  uint8_t extended_addr[8];//unique IEEE addr
+  uint16_t nwk_addr;
+  uint8_t device_type:2;
+  uint8_t rx_on_when_idle:1;
+  uint8_t relationship:3;
+  uint8_t transmit_failure;
+  uint8_t lqi;
+  uint8_t outgoing_cost;
+  uint8_t age;
+} neighbour_table_handle;
+
+typedef struct __network_descriptor_handle {
+  uint8_t extended_panid[8];
+  uint8_t logical_channel;
+  uint8_t stack_profile:4;
+  uint8_t zigbee_version:4;
+  uint8_t beacon_order:4;
+  uint8_t superframe_order:4;
+  uint8_t permit_joining:1;
+  uint8_t router_capacity:1;
+  uint8_t end_device_capacity:1;
+} network_descriptor_handle;
+
 
 /* Currently, size of MAC_PIB_attributes = 24 */
 struct MAC_PIB_attributes_handle {
@@ -85,9 +122,9 @@ struct MAC_PIB_attributes_handle {
   uint8_t macBattLifeExtPeriods:5;//0x44 int, not used
   
   //uint8_t macAutoRequest:1;//0x42 bool, whether device auto sends a data request command if its addr is in beacon, not used
-  //uint8_t *macBeaconPayload;//0x45 array
-  //uint8_t macBeaconPayloadLength;//0x46 int
-  //uint8_t macBeaconOrder;//0x47 int
+  mac_beacon_payload_handle macBeaconPayload;//0x45 array
+  uint8_t macBeaconPayloadLength;//0x46 int
+  uint8_t macBeaconOrder;//0x47 int
   //uint16_t macBeaconTxTime;//0x48 int
   //uint8_t macBSN;//0x49 seq num added to the transmitted beacon frame
   //uint8_t macMaxFrameTotalWaitTime; not used in non-beacon net

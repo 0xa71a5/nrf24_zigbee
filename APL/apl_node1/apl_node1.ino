@@ -36,9 +36,6 @@ static void send_packet_test(void *params)
   }
 }
 
-
-extern nlme_formation_confirm_handle *data_confirm_ptr;
-
 void apl_layer_test(void *params)
 {
   uint32_t record_time;
@@ -51,6 +48,7 @@ void apl_layer_test(void *params)
 
   debug_printf("Enter apl_layer_test\n");
 
+
   /* only coord needs to formation */
   //debug_printf("apl layer call nlme_network_formation_request\n");
   //nlme_network_formation_request(0, 100, 0);
@@ -61,11 +59,13 @@ void apl_layer_test(void *params)
     }
     // TODO : APL layer send and receive data 
     vTaskDelay(7);
+
     if (Serial.available()) {
       Serial.read();
       debug_printf("\nCall nlme_network_discovery_request\n");
-      nlme_network_discovery_request(0xffffffff, 100);
+      nlme_network_discovery_request(0, 100);
     }
+
   }
 
 
@@ -77,7 +77,7 @@ void apl_layer_test(void *params)
     nlde_data_request(dst_addr, apl_data_length, apl_data, handle, 0, 0);
 
     if (signal_wait(&apl_data_confirm_event_flag, 500)) {
-      if (!data_confirm_ptr->status)
+      if (!apl_data_confirm_ptr->status)
         debug_printf("Got data request confirm\n");
       else
         debug_printf("Got data confirm ,but it says send failed\n");
@@ -86,6 +86,8 @@ void apl_layer_test(void *params)
       debug_printf("Dont get date request confirm in limit time\n");
     debug_printf("\n");
   }
+
+
 }
 
 

@@ -15,7 +15,7 @@ void apl_layer_init()
   /* Do a default setting of PIB attributes */
 }
 
-nlme_formation_confirm_handle *data_confirm_ptr;
+nlme_formation_confirm_handle *apl_data_confirm_ptr;
 
 void apl_layer_event_process(void *params)
 {
@@ -35,7 +35,7 @@ void apl_layer_event_process(void *params)
 
         case confirm_type_data_confirm:
           apl_data_confirm_event_flag = 1;
-          data_confirm_ptr = (nlme_formation_confirm_handle *)event.confirm_ptr;
+          apl_data_confirm_ptr = (nlme_formation_confirm_handle *)event.confirm_ptr;
         break;
 
       }

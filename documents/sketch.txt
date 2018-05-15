@@ -11,3 +11,67 @@ MAC Layer笔记：
 active scan对于coord来说
 If a coordinator of a beacon-enabled PAN receives the beacon request command, it shall ignore the
 command and continue transmitting its periodic beacons as usual. If a coordinator of a nonbeacon-enabled PAN receives this command, it shall transmit a single beacon frame using unslotted CSMA-CA。
+
+2.【NWK discovery Request & Confirm】
+nwk discovery首先进行activescan，然后会在一定时间内持续接受beacon-notify-indication，从beacon中提取出周围的网络信息。
+收到beacon-request command的coord会打包本机的mac_beacon_payload，通过信标帧广播出去。mac_beacon_payload存储在mac层的PIB属性列表中，当coord在执行formation-request时需要根据自身信息填充该payload，同样的当deivce在join一个网络后也需要立即更新这个表。
+
+	typedef struct __mac_beacon_payload_handle {
+	  uint8_t protocal_id:8;
+	  uint8_t stack_profile:4;
+	  uint8_t nwk_protocal_version:4;
+	  uint8_t reserved:2;
+	  uint8_t router_capacity:1;
+	  uint8_t device_depth:4;
+	  uint8_t end_device_capacity:1;
+	  uint8_t nwk_extended_panid[8];
+	  uint8_t tx_offset[3];
+	  uint8_t nwk_update_id;
+	} mac_beacon_payload_handle; 
+（其中end_device_capacity等价于下面的）
+
+
+收到beacon的设备首先检测protocol_id是否是zigbee protocal，然后会从beacon payload中提取需要的信息存储到如下neighbour_table_handle中。
+
+	typedef struct __neighbour_table_handle {
+	  uint8_t extended_addr[8];//unique IEEE addr
+	  uint16_t nwk_addr;
+	  uint8_t device_type:2;
+	  uint8_t rx_on_when_idle:1;
+	  uint8_t relationship:3;
+	  uint8_t transmit_failure;
+	  uint8_t lqi;
+	  uint8_t outgoing_cost;
+	  uint8_t age;
+	} neighbour_table_handle;
+
+并且如果当前设备正在进行discovery任务，那么将会从beacon frame中提取出network_descriptor_handle的信息并以discovery_confirm的形式返回到NWK上一级。注意network_descriptor_handle中的permit_joining字段等价于mac_beacon_payload中的end_device_capacity。
+
+	typedef struct __network_descriptor_handle {
+	  uint8_t extended_panid[8];
+	  uint8_t logical_channel; 
+	  uint8_t stack_profile:4;
+	  uint8_t zigbee_version:4;
+	  uint8_t beacon_order:4;
+	  uint8_t superframe_order:4;
+	  uint8_t permit_joining:1;
+	  uint8_t router_capacity:1;
+	  uint8_t end_device_capacity:1;
+	} network_descriptor_handle;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

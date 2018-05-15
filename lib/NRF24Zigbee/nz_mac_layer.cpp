@@ -77,6 +77,7 @@ void mlme_start_request(uint16_t macPANId = 0, uint8_t logicalChannel = 0, uint8
 	uint8_t macBattLifeExt = 0)
 {
   if (mlme_get_request(macShortAddress) == 0xffff) {
+    debug_printf("mlme_start_request: return of NO_SHORT_ADDRESS\n");
   	mlme_start_confirm(NO_SHORT_ADDRESS);
   	return;
   }
@@ -221,6 +222,7 @@ void mcps_handle_beacon_request()
   mpdu_beacon_frame_handle *beacon = (mpdu_beacon_frame_handle *)beacon_mem;
   pan_descriptor_16_handle *pan_descriptor = NULL;
   pending_addr_list *addr_list = NULL;
+  mac_beacon_payload_handle *mac_beacon_payload = NULL;
   uint8_t to_send_size = 0;
 
   /* Send out pending data and pan descriptor */
@@ -236,7 +238,7 @@ void mcps_handle_beacon_request()
   beacon->src_addr = mlme_get_request(macShortAddress);
 
   pan_descriptor = (pan_descriptor_16_handle *)beacon->payload;
-  addr_list = (pending_addr_list *)(beacon->payload + sizeof(pan_descriptor_16_handle));
+  addr_list = (pending_addr_list *)((uint8_t *)pan_descriptor + sizeof(pan_descriptor_16_handle));
 
   pan_descriptor->coord_addr_mode = addr_16_bit;
   pan_descriptor->gts_perimit = 0;
@@ -249,8 +251,13 @@ void mcps_handle_beacon_request()
 
   addr_list->size = 0;
 
+  mac_beacon_payload = (mac_beacon_payload_handle *)((uint8_t *)addr_list + sizeof(pending_addr_list) + 
+    addr_list->size*2);
+
+  *mac_beacon_payload = mlme_get_request(macBeaconPayload);
+
   to_send_size = sizeof(mpdu_beacon_frame_handle) + sizeof(pan_descriptor_16_handle)
-    + sizeof(pending_addr_list) + sizeof(uint16_t) * addr_list->size;
+    + sizeof(pending_addr_list) + sizeof(uint16_t) * addr_list->size + sizeof(mac_beacon_payload_handle);
 
   debug_printf(">>>> Send out beacon!\n");
   phy_layer_send_raw_data(DEFAULT_BROADCAST_ADDR, (uint8_t *)beacon, to_send_size);
@@ -262,6 +269,8 @@ void mcps_beacon_notify_indication(uint8_t bsn, uint8_t sdu_length, uint8_t *sdu
   /* Judge beacon type to */
   pan_descriptor_64_handle  pan_descriptor_64 = *(pan_descriptor_64_handle *)sdu;
   pending_addr_list *addr_list = NULL;
+  mac_beacon_payload_handle *mac_beacon_payload;
+  network_descriptor_handle nwk_descriptor;
 
   if (pan_descriptor_64.coord_addr_mode == addr_16_bit) {
     debug_printf("mcps_beacon_notify_indication, pan_descriptor is 16bit\n");
@@ -277,10 +286,24 @@ void mcps_beacon_notify_indication(uint8_t bsn, uint8_t sdu_length, uint8_t *sdu
     return;
   }
 
+  mac_beacon_payload = (mac_beacon_payload_handle *)((uint8_t *)addr_list + sizeof(pending_addr_list) + addr_list->size*2);
+  
+  memcpy(nwk_descriptor.extended_panid, mac_beacon_payload->nwk_extended_panid, 8);
+  nwk_descriptor.logical_channel = 0;
+  nwk_descriptor.stack_profile = mac_beacon_payload->stack_profile;
+  nwk_descriptor.zigbee_version = mac_beacon_payload->nwk_protocal_version;
+  nwk_descriptor.beacon_order = 0;
+  nwk_descriptor.superframe_order = 0;
+  /* permit_joining ? */
+  nwk_descriptor.permit_joining = mac_beacon_payload->end_device_capacity;
+  nwk_descriptor.router_capacity = mac_beacon_payload->router_capacity;
+  nwk_descriptor.end_device_capacity = mac_beacon_payload->end_device_capacity;
+
   /* Here we consume that pan_descriptor to 64bit addr
      cause in this way we can have space to store both 16bit and 64bit types data
   */
   event_fifo_in(&nwk_pan_descriptors_fifo, &pan_descriptor_64);
+  event_fifo_in(&nwk_descriptors_fifo, &nwk_descriptor);
 }
 
 void mcps_data_confirm(uint8_t msdu_handle, uint8_t status, uint32_t time_stamp)
