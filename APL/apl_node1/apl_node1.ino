@@ -42,6 +42,7 @@ extern nlme_formation_confirm_handle *data_confirm_ptr;
 void apl_layer_test(void *params)
 {
   uint32_t record_time;
+  static apl_indication indication;
   #define apl_data_length 45
   static uint8_t apl_data[apl_data_length];
 
@@ -53,6 +54,20 @@ void apl_layer_test(void *params)
   /* only coord needs to formation */
   //debug_printf("apl layer call nlme_network_formation_request\n");
   //nlme_network_formation_request(0, 100, 0);
+
+  while (1) {
+    if (xQueueReceive(apl_indication_fifo, &indication, 1000)) {
+      debug_printf("app:recv msg,data_size=%u data=[%s] \n\n", indication.length, indication.data);
+    }
+    // TODO : APL layer send and receive data 
+    vTaskDelay(7);
+    if (Serial.available()) {
+      Serial.read();
+      debug_printf("\nCall nlme_network_discovery_request\n");
+      nlme_network_discovery_request(0xffffffff, 100);
+    }
+  }
+
 
   while (1) {
     vTaskDelay(500);
@@ -79,7 +94,7 @@ void setup()
   Serial.begin(2000000);
   printf_begin();
   debug_printf("Begin config!\n");
-  phy_layer_init(0200);
+  phy_layer_init(0x0200);
   mac_layer_init();
   nwk_layer_init();
   apl_layer_init();

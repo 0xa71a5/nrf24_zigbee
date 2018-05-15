@@ -15,7 +15,7 @@
 
 extern QueueHandle_t nwk_confirm_fifo;
 extern QueueHandle_t nwk_indication_fifo;
-
+extern event_fifo_handle nwk_pan_descriptors_fifo;
 
 #define nlme_set_request(perp_name, value) NWK_PIB_attributes.perp_name = value
 /* We dont use set_confirm , cause this is some kind a waste */
@@ -113,6 +113,8 @@ typedef struct __nwk_indicaiton_handle
 	uint8_t data[NPDU_MAX_SIZE];
 } nwk_indication;
 
+
+
 void nwk_layer_init();
 void nlme_send_confirm_event(uint8_t confirm_type, void *ptr);
 void nlme_network_formation_request(uint8_t scan_channels, uint8_t scan_duration, uint8_t battery_life_ext);
@@ -124,6 +126,7 @@ void nlde_data_request(uint16_t dst_addr, uint8_t nsdu_length, uint8_t *nsdu, ui
 void nlde_data_confirm(uint8_t status, uint8_t npdu_handle, uint32_t tx_time);
 void nlde_data_indication(uint8_t dst_addr_mode, uint16_t dst_addr, uint16_t src_addr, 
   uint8_t nsdu_length, uint8_t *nsdu, uint32_t rx_time);
-
+void nlme_network_discovery_request(uint32_t scan_channels, uint8_t scan_duration);
+void nlme_network_discovery_confirm();
 
 #endif

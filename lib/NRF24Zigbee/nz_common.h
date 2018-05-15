@@ -94,9 +94,22 @@ typedef struct __mpdu_frame_handle {
   uint8_t payload[0];
 } mpdu_frame_handle;
 
+typedef struct __mpdu_beacon_frame_handle {
+  uint16_t crc;
+  mpdu_frame_control frame_control;
+  uint8_t seq;
+  uint16_t src_pan_id;
+  uint16_t src_addr;
+  /* Here we ignore superframe and gts field*/
+  /* We store panDescriptor and pendingAddr in payload */
+  uint8_t payload[0];
+} mpdu_beacon_frame_handle;
 
 #define MPDU_MAX_SIZE 128
 #define MPDU_PAYLOAD_MAX_SIZE (MPDU_MAX_SIZE - sizeof(mpdu_frame_handle))
+#define MPDU_BEACON_MAX_SIZE MPDU_MAX_SIZE
+
+
 
 typedef struct __npdu_frame_control {
   uint8_t frame_type:2;
@@ -133,6 +146,20 @@ typedef struct __npdu_frame_handle {
   uint8_t multicast_control;
   uint8_t payload[0];
 } npdu_frame_handle;
+
+enum cmd_frame_identifier {
+  association_request = 0,
+  association_response,
+  disassociation_notification,
+  data_request,
+  pan_id_conflic_notification,
+  orphan_notification,
+  beacon_request,
+  coordinator_realignment,
+  gts_request,
+  reserved
+};
+
 
 #define NPDU_MAX_SIZE  MPDU_PAYLOAD_MAX_SIZE
 #define NPDU_FRAME_OVERHEAD_SIZE sizeof(npdu_frame_handle)

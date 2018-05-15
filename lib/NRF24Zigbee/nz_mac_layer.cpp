@@ -22,12 +22,36 @@ void mlme_send_confirm_event(uint8_t confirm_type, void *ptr)
   xQueueSendToBack(nwk_confirm_fifo, &event, 500 /portTICK_PERIOD_MS);
 }
 
-void mlme_scan_request(uint8_t scan_type=0, uint8_t scan_channels=0, uint8_t scan_duration=0, 
-    uint8_t channel_i_page=0)
-{
-  vTaskDelay(10);
+uint16_t restore_pan_id = 0xffff;
 
-  //TODO: real scan implemention
+void mlme_scan_request(uint8_t scan_type=0, uint32_t scan_channels=0, uint8_t scan_duration=0, 
+    uint8_t channel_i_page=0)
+{  
+  mpdu_frame_handle cmd_frame;
+  bool send_result;
+  uint8_t to_send_size;
+  //TODO: edscan and active scan implemention
+
+  if (scan_type == active_scan) {
+    debug_printf("mlme_set_request active_scan\n");
+    restore_pan_id = mlme_get_request(macPANId);
+
+    /* Set local panid to 0xffff */
+    mlme_set_request(macPANId, 0xffff);
+
+    /* Send out active scan request beacon */
+    cmd_frame.frame_control.frame_type = mac_frame_type_command;
+    cmd_frame.frame_control.dst_addr_mode = mac_addr_16bits;
+    // TODO: src addr shall be comprised
+    //cmd_frame.frame_control.src_addr_mode = mac_addr_no_present;
+    cmd_frame.dst_pan_id = 0xffff;
+    cmd_frame.dst_addr = 0xffff;
+    cmd_frame.payload[0] = beacon_request;
+    to_send_size = sizeof(cmd_frame) + 1;
+
+    debug_printf("call phy_layer_send_raw_data, dst_addr=0x%04X\n", DEFAULT_BROADCAST_ADDR);
+    phy_layer_send_raw_data(DEFAULT_BROADCAST_ADDR, (uint8_t *)&cmd_frame, to_send_size);
+  }
 
   mlme_scan_confirm(scan_type, scan_channels, channel_i_page);
 }
@@ -44,7 +68,7 @@ void mlme_scan_confirm(uint8_t status=0, uint8_t scan_type=0, uint8_t channel_pa
   scan_confirm.unscaned_channels = unscaned_channels;
   //scan_confirm.energy_detect_list = energy_detect_list;
   //scan_confirm.pan_descript_list = pan_descript_list;
-
+  debug_printf("mlme_scan_confirm\n");
   mlme_send_confirm_event(confirm_type_scan, &scan_confirm);
 }
 
@@ -80,6 +104,7 @@ void mac_layer_event_process(void * params)
   mlme_scan_confirm_handle * scan_confirm_ptr;
   static uint8_t data[128];
   mpdu_frame_handle * mpdu_frame = (mpdu_frame_handle *)data;
+  mpdu_beacon_frame_handle * beacon = (mpdu_beacon_frame_handle *)data;
   uint8_t data_length;
   uint8_t payload_size = 0;
 
@@ -92,17 +117,170 @@ void mac_layer_event_process(void * params)
 
     if ((data_length = phy_layer_fifo_top_node_size()) > 0) {
       data_length = phy_layer_fifo_pop_data(data);
-      payload_size = data_length - sizeof(mpdu_frame_handle);
 
-      debug_printf("<=== mac_sv data_size=%u msdu_size=%u \n", data_length, payload_size);
       // TODO : DSN
-      mcps_data_indication(mpdu_frame->frame_control.src_addr_mode, mpdu_frame->src_pan_id, mpdu_frame->src_addr,
-        mpdu_frame->frame_control.dst_addr_mode, mpdu_frame->dst_pan_id, mpdu_frame->dst_addr,
-        payload_size, mpdu_frame->payload, 0, millis());
+      if (mpdu_frame->frame_control.frame_type == mac_frame_type_data) {
+        payload_size = data_length - sizeof(mpdu_frame_handle);
+        debug_printf("<=== mac_sv data_size=%u msdu_size=%u \n", data_length, payload_size);
+        
+        mcps_data_indication(mpdu_frame->frame_control.src_addr_mode, mpdu_frame->src_pan_id, mpdu_frame->src_addr,
+          mpdu_frame->frame_control.dst_addr_mode, mpdu_frame->dst_pan_id, mpdu_frame->dst_addr,
+          payload_size, mpdu_frame->payload, 0, millis());
+      
+      }
+
+      else if (mpdu_frame->frame_control.frame_type == mac_frame_type_beacon) {
+        payload_size = data_length - sizeof(mpdu_beacon_frame_handle);
+        debug_printf("<=== mac_sv beacon_size=%u payload_size=%u \n", data_length, payload_size);
+
+        /* Here we store panDescriptor and pendingAddrList in beacon frame payload */
+        mcps_beacon_notify_indication(beacon->seq, payload_size, beacon->payload);
+      }
+
+      else if (mpdu_frame->frame_control.frame_type == mac_frame_type_command) {
+        payload_size = data_length - sizeof(mpdu_frame_handle);
+        debug_printf("<=== mac_sv cmd_size=%u msdu_size=%u \n", data_length, payload_size);
+        mcps_command_response(mpdu_frame, payload_size);
+        //TODO: response this data request
+      }
+
+      else {
+        debug_printf("<=== mac_sv Unknown frame type!\n");
+      }
+
     }
+
 
     vTaskDelay(1);
   }
+}
+
+void mcps_command_response(mpdu_frame_handle * mpdu_frame, uint8_t payload_size)
+{
+  if (mpdu_frame->frame_control.frame_type != mac_frame_type_command) {
+    debug_printf("This is not a command frame,ignore\n");
+    return;
+  }
+
+  if (payload_size == 0) {
+    debug_printf("command frame payload size == 0,ignore\n");
+  }
+
+  switch (mpdu_frame->payload[0]) {
+    case association_request:
+      debug_printf("handle association_request\n");
+    break;
+
+    case association_response:
+      debug_printf("handle association_response\n");
+    break;
+
+    case disassociation_notification:
+      debug_printf("handle disassociation_notification\n");
+    break;
+
+    case data_request:
+      debug_printf("handle data_request\n");
+    break;
+
+    case pan_id_conflic_notification:
+      debug_printf("handle pan_id_conflic_notification\n");
+    break;
+
+    case orphan_notification:
+      debug_printf("handle orphan_notification\n");
+    break;
+
+    case beacon_request:
+      // TODO: Judge if this device is a coord ,otherwise it shouldnt handle beacon request
+      debug_printf("handle beacon_request\n");
+      if (mlme_get_request(macPANCoordinator))
+        mcps_handle_beacon_request();
+      else
+        debug_printf("This device is not coord ,ignore beacon request\n");
+
+    break;
+
+    case coordinator_realignment:
+      debug_printf("handle coordinator_realignment\n");
+    break;
+
+    case gts_request:
+      debug_printf("handle gts_request\n");
+    break;
+
+    default:
+      debug_printf("Unknow command type!\n");
+  }
+
+}
+
+void mcps_handle_beacon_request()
+{
+  static uint8_t beacon_mem[MPDU_BEACON_MAX_SIZE];
+  mpdu_beacon_frame_handle *beacon = (mpdu_beacon_frame_handle *)beacon_mem;
+  pan_descriptor_16_handle *pan_descriptor = NULL;
+  pending_addr_list *addr_list = NULL;
+  uint8_t to_send_size = 0;
+
+  /* Send out pending data and pan descriptor */
+  
+  //TODO: pending data check
+
+  beacon->frame_control.frame_type = mac_frame_type_beacon;
+  beacon->frame_control.frame_pending = 0;
+  beacon->frame_control.src_addr_mode = mac_addr_16bits;
+
+  beacon->seq ++;
+  beacon->src_pan_id = mlme_get_request(macPANId);
+  beacon->src_addr = mlme_get_request(macShortAddress);
+
+  pan_descriptor = (pan_descriptor_16_handle *)beacon->payload;
+  addr_list = (pending_addr_list *)(beacon->payload + sizeof(pan_descriptor_16_handle));
+
+  pan_descriptor->coord_addr_mode = addr_16_bit;
+  pan_descriptor->gts_perimit = 0;
+  pan_descriptor->link_quality = 0;
+  pan_descriptor->coord_pan_id = mlme_get_request(macPANId);
+  pan_descriptor->coord_addr = mlme_get_request(macShortAddress);
+  pan_descriptor->logical_channel = mlme_get_request(macLogicalChannel);
+  pan_descriptor->channel_page = 0;
+  pan_descriptor->time_stamp = millis();
+
+  addr_list->size = 0;
+
+  to_send_size = sizeof(mpdu_beacon_frame_handle) + sizeof(pan_descriptor_16_handle)
+    + sizeof(pending_addr_list) + sizeof(uint16_t) * addr_list->size;
+
+  debug_printf(">>>> Send out beacon!\n");
+  phy_layer_send_raw_data(DEFAULT_BROADCAST_ADDR, (uint8_t *)beacon, to_send_size);
+}
+
+/* Not use pending addr param */
+void mcps_beacon_notify_indication(uint8_t bsn, uint8_t sdu_length, uint8_t *sdu)
+{
+  /* Judge beacon type to */
+  pan_descriptor_64_handle  pan_descriptor_64 = *(pan_descriptor_64_handle *)sdu;
+  pending_addr_list *addr_list = NULL;
+
+  if (pan_descriptor_64.coord_addr_mode == addr_16_bit) {
+    debug_printf("mcps_beacon_notify_indication, pan_descriptor is 16bit\n");
+    addr_list = (pending_addr_list *)(sdu + sizeof(pan_descriptor_16_handle));
+    // TODO: serach add_list to find if this device is in the list
+  }
+  else if (pan_descriptor_64.coord_addr_mode == addr_64_bit) {
+    debug_printf("mcps_beacon_notify_indication, pan_descriptor is 64bit\n");
+    addr_list = (pending_addr_list *)(sdu + sizeof(pan_descriptor_64_handle));
+  }
+  else {
+    debug_printf("Unknown type of pan_descriptor\n");
+    return;
+  }
+
+  /* Here we consume that pan_descriptor to 64bit addr
+     cause in this way we can have space to store both 16bit and 64bit types data
+  */
+  event_fifo_in(&nwk_pan_descriptors_fifo, &pan_descriptor_64);
 }
 
 void mcps_data_confirm(uint8_t msdu_handle, uint8_t status, uint32_t time_stamp)
@@ -133,6 +311,14 @@ void mcps_data_request(uint8_t src_addr_mode, uint8_t dst_addr_mode, uint16_t ds
     return;
   }
 
+  mpdu_frame->frame_control.frame_type = mac_frame_type_data;
+  mpdu_frame->frame_control.security_enable = 0;
+  mpdu_frame->frame_control.frame_pending = 0;
+  mpdu_frame->frame_control.ack_request = 0;
+  mpdu_frame->frame_control.pan_id_compression = 0;
+  mpdu_frame->frame_control.dst_addr_mode = mac_addr_16bits;
+  mpdu_frame->frame_control.src_addr_mode = mac_addr_16bits;
+
   mpdu_frame->seq ++;
   mpdu_frame->dst_pan_id = dst_pan_id;
   mpdu_frame->dst_addr = dst_addr;
@@ -142,6 +328,7 @@ void mcps_data_request(uint8_t src_addr_mode, uint8_t dst_addr_mode, uint16_t ds
   memcpy(mpdu_frame->payload, msdu, msdu_length);
   to_send_size = sizeof(mpdu_frame_handle) + msdu_length;
  
+  debug_printf("call phy_layer_send_raw_data, dst_addr=0x%04X\n", dst_addr);
   /* here dst addr we can use 0xff00 ,cause this is a broadcast addr ,and anyone can receive it */
   send_result = phy_layer_send_raw_data(dst_addr, (uint8_t *)mpdu_frame, to_send_size);
   if (send_result)
@@ -163,7 +350,9 @@ void mcps_data_indication(uint8_t src_addr_mode, uint16_t src_pan_id, uint16_t s
   //Q: whether should i send params that other than msdu data to the nwk layer?
   //TODO : Judge addr mode
 
-  if (dst_addr == mlme_get_request(macShortAddress) && dst_pan_id == mlme_get_request(macPANId)) {
+  if ((dst_addr == mlme_get_request(macShortAddress) && dst_pan_id == mlme_get_request(macPANId))
+    || (dst_addr == 0xffff) 
+    || (mlme_get_request(macPANId) == 0xffff )) {
     indication.length = msdu_length;
     memcpy(indication.data, msdu, msdu_length);
     xQueueSendToBack(nwk_indication_fifo, &indication, 500);

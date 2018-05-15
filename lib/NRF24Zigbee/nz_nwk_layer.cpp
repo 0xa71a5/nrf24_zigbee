@@ -8,12 +8,21 @@ volatile uint8_t scan_confirm_event_flag = 0;
 volatile uint8_t start_confirm_event_flag = 0;
 volatile uint8_t data_confirm_event_flag = 0;
 
+#define BEACON_INDICATION_FIFO_SIZE 4
+event_node_handle event_pan_des_ptr_area[BEACON_INDICATION_FIFO_SIZE];
+pan_descriptor_64_handle nwk_pan_descriptors_mem[BEACON_INDICATION_FIFO_SIZE];
+event_fifo_handle nwk_pan_descriptors_fifo;
+
+
 struct NWK_PIB_attributes_handle NWK_PIB_attributes;
 
 void nwk_layer_init()
 {
   nwk_confirm_fifo = xQueueCreate(NWK_CONFIRM_FIFO_SIZE, sizeof(confirm_event));
   nwk_indication_fifo = xQueueCreate(NWK_INDICATION_FIFO_SIZE, sizeof(nwk_indication));
+
+  event_fifo_init(&nwk_pan_descriptors_fifo, event_pan_des_ptr_area,
+  nwk_pan_descriptors_mem, BEACON_INDICATION_FIFO_SIZE, sizeof(pan_descriptor_64_handle));
 }
 
 void nlme_send_confirm_event(uint8_t confirm_type, void *ptr)
@@ -184,6 +193,9 @@ void nlde_data_request(uint16_t dst_addr, uint8_t nsdu_length, uint8_t *nsdu, ui
 
   /* Construct npdu data */
   //npdu_frame->frame_control = 0x00;
+  npdu_frame->frame_control.frame_type = nwk_frame_type_data;
+  npdu_frame->frame_control.security = 0;
+
   npdu_frame->dst_addr = dst_addr;
   npdu_frame->src_addr = nlme_get_request(nwkNetworkAddress);
   npdu_frame->radius = 0xff;
@@ -216,3 +228,62 @@ void nlde_data_confirm(uint8_t status, uint8_t npdu_handle, uint32_t tx_time)
   debug_printf("nlde_data_confirm %u 0x%04X\n", status, &confirm);
 }
 
+extern volatile uint16_t restore_pan_id;
+
+void nlme_network_discovery_request(uint32_t scan_channels, uint8_t scan_duration)
+{
+  uint32_t start_time;
+  pan_descriptor_64_handle pan_descriptor_64;
+  pan_descriptor_16_handle *pan_descriptors_16_ptr;
+  
+  /*We have to use the 64bit one,
+  cause we dont know true size of it before we read it*/
+
+  /* Do a active scan for sniffering any pan coord */
+  mlme_scan_request(active_scan, scan_channels, scan_duration, 0);
+
+  /* Wait for scan request beacon all sent */
+  if (signal_wait(&scan_confirm_event_flag, 1000))
+    debug_printf("Active scan done ,all beacon requests sent out\n");
+  else {
+    goto fail_exit;
+  }
+
+  debug_printf("Waiting for pan_descriptor beacons...\n");
+  /* Sleep 1000ms to receive beacons */
+  vTaskDelay(1000);
+  mlme_set_request(macPANId, restore_pan_id);
+
+  if (nwk_pan_descriptors_fifo.cur_size != 0) {
+    debug_printf("Got %u pan_descriptors!\n", nwk_pan_descriptors_fifo.cur_size);
+    debug_printf("###### PAN DESCRIPTOR PRINT ######\n");
+    while (event_fifo_out(&nwk_pan_descriptors_fifo, &pan_descriptor_64)) {
+      if (pan_descriptor_64.coord_addr_mode == addr_16_bit) {
+        pan_descriptors_16_ptr = (pan_descriptor_16_handle *)&pan_descriptor_64;
+        debug_printf("PANid=0x%04X CoordAddr=0x%04X\n", 
+          pan_descriptors_16_ptr->coord_pan_id, pan_descriptors_16_ptr->coord_addr);
+      }
+      else {
+        debug_printf("PANid=0x%04X CoordAddr=0x%04X\n", 
+          pan_descriptor_64.coord_pan_id, pan_descriptor_64.coord_addr);
+      }
+    }
+    debug_printf("##################################\n\n");
+
+    //TODO: Choose a pan to join 
+
+  }
+  else {
+    debug_printf("Dont got any beacons!\n");
+  }
+
+  return;
+
+  fail_exit:
+  nlme_network_discovery_confirm();
+}
+
+
+void nlme_network_discovery_confirm()
+{
+}

@@ -4,6 +4,8 @@
 #include <nz_mac_layer.h>
 #include <nz_nwk_layer.h>
 #include <nz_apl_layer.h>
+#include <event_fifo.h>
+
 
 TaskHandle_t task_rx_server_handle;
 TaskHandle_t task_rx_get_data_handle;
@@ -58,12 +60,20 @@ void apl_layer_test(void *params)
     debug_printf("###formation failed!###\n\n");
   }
 
+
   while (1) {
     if (xQueueReceive(apl_indication_fifo, &indication, 1000)) {
       debug_printf("app:recv msg,data_size=%u data=[%s] \n\n", indication.length, indication.data);
     }
     // TODO : APL layer send and receive data 
     vTaskDelay(7);
+    /*
+    if (Serial.available()) {
+      Serial.read();
+      debug_printf("\nCall nlme_network_discovery_request\n");
+      nlme_network_discovery_request(0xffffffff, 100);
+    }
+    */
   }
 
 }
@@ -74,6 +84,8 @@ void setup()
   Serial.begin(2000000);
   printf_begin();
   debug_printf("Begin config!\n");
+
+
   phy_layer_init(0x0100);
   mac_layer_init();
   nwk_layer_init();

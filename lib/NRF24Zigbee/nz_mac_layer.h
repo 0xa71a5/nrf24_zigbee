@@ -40,6 +40,39 @@ typedef struct __mcps_data_confirm_handle {
   uint32_t time_stamp;
 } mcps_data_confirm_handle;
 
+enum coord_addr_mode_enum {
+  addr_16_bit = 2,
+  addr_64_bit = 3,
+};
+
+typedef struct __pan_descriptor_16 {
+  uint8_t coord_addr_mode:2;
+  uint8_t gts_perimit:1;
+  uint8_t link_quality:5;
+  uint16_t coord_pan_id;
+  uint16_t coord_addr;
+  uint8_t logical_channel;
+  uint8_t channel_page;
+  uint8_t superframe_spec;
+  uint32_t time_stamp;
+} pan_descriptor_16_handle;
+
+typedef struct __pan_descriptor_64 {
+  uint8_t coord_addr_mode:2;
+  uint8_t gts_perimit:1;
+  uint8_t link_quality:5;
+  uint16_t coord_pan_id;
+  uint8_t coord_addr[8];
+  uint8_t logical_channel;
+  uint8_t channel_page;
+  uint8_t superframe_spec;
+  uint32_t time_stamp;
+} pan_descriptor_64_handle;
+
+typedef struct __pending_addr_list {
+  uint8_t size;
+  uint16_t addr[0];
+} pending_addr_list;
 
 
 /* Currently, size of MAC_PIB_attributes = 24 */
@@ -99,12 +132,9 @@ extern QueueHandle_t mac_confirm_fifo;
 /* We dont use set_confirm , cause this is some kind a waste */
 #define mlme_get_request(perp_name) MAC_PIB_attributes.perp_name
 
-
-
-
 void mac_layer_init();
 
-void mlme_scan_request(uint8_t scan_type=0, uint8_t scan_channels=0, uint8_t scan_duration=0, 
+void mlme_scan_request(uint8_t scan_type=0, uint32_t scan_channels=0, uint8_t scan_duration=0, 
     uint8_t channel_i_page=0);
 
 void mlme_scan_confirm(uint8_t status=0, uint8_t scan_type=0, uint8_t channel_page=0, uint32_t unscaned_channels=0,
@@ -124,5 +154,11 @@ void mcps_data_confirm(uint8_t msdu_handle, uint8_t status, uint32_t time_stamp)
 
 void mcps_data_indication(uint8_t src_addr_mode, uint16_t src_pan_id, uint16_t src_addr, uint8_t dst_addr_mode,
   uint16_t dst_pan_id, uint16_t dst_addr, uint8_t msdu_length, uint8_t *msdu, uint8_t dsn, uint32_t time_stamp);
+
+void mcps_beacon_notify_indication(uint8_t bsn, uint8_t sdu_length, uint8_t *sdu);
+
+void mcps_command_response(mpdu_frame_handle * mpdu_frame, uint8_t payload_size);
+
+void mcps_handle_beacon_request();
 
 #endif

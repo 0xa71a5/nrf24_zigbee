@@ -1,0 +1,13 @@
+
+MAC Layer笔记：
+
+1.【Active Scan】
+在进行active scan的时候，mac层需要先保存自己的 macPANId，然后在扫描阶段一直设置自己的panId 为0xffff，扫描结束后再恢复原来的panid，这样做的目的是让mac层尽可能接收到当前无线环境下所有的信标，而不是仅仅是自己所在PAN的信标。
+开始进行active scan，需要根据scan_request输入的channel参数选择切换到对应的一个或多个channel，然后构造MAC层的信标请求命令帧，参考IEEE 802.15.4的7.3.7节，信标请求命令帧由 7byte MHR field + 1byte 命令帧标识符组成。
+在MHR中，FrameControl区域的Destination Addressing Mode需要设置成0x02（表示16位短地址），Source Addressing Mode需要设置成0x00，表示源地址位未设置。 目标PANId域需要设置成0xffff,目标地址域也需要设置成0xffff。命令帧标识符需要设置成0x07（Beacon Request）。
+【这里放一张MAC command frame的表格，参见 IEEE 149页】
+【active scan资料 参考 IEEE 7.5.2.1.2 Active channel scan】
+
+active scan对于coord来说
+If a coordinator of a beacon-enabled PAN receives the beacon request command, it shall ignore the
+command and continue transmitting its periodic beacons as usual. If a coordinator of a nonbeacon-enabled PAN receives this command, it shall transmit a single beacon frame using unslotted CSMA-CA。
