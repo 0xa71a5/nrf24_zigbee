@@ -100,7 +100,7 @@ void phy_layer_test_and_copy(phy_packet_handle *packet, rx_node_handle *phy_rx_n
 
 void phy_layer_listener(void)
 {
-  uint8_t raw_data[32];
+  static uint8_t raw_data[32];
   phy_packet_handle * packet = (phy_packet_handle *)raw_data;
   rx_node_handle * phy_rx_node = NULL;
   uint8_t last_slice_index = 0;
@@ -316,20 +316,21 @@ void phy_layer_set_dst_addr(uint8_t *addr)
   static uint8_t mac_addr[5] = {PUBLIC_MAC_ADDR_0, PUBLIC_MAC_ADDR_1, PUBLIC_MAC_ADDR_2, addr[0], addr[1]};
   pr_debug("set_addr\n");
   nrf_set_tx_addr(mac_addr);
+  pr_debug("set_addr complete\n");
 }
 
 
 bool phy_layer_send_raw_data(uint16_t dst_mac_addr_u16, uint8_t *raw_data, uint16_t length)
 {
-  uint8_t compare_flag = 0;
-  uint8_t i;
-  uint8_t dst_mac_addr[2];
-  uint8_t send_result = 1;
+  static uint8_t compare_flag = 0;
+  static uint8_t i;
+  static uint8_t dst_mac_addr[2];
+  static uint8_t send_result = 1;
   static uint8_t packet_index = 0;
-  uint8_t packet_mem[32] = {0};
+  static uint8_t packet_mem[32] = {0};
   phy_packet_handle * packet = (phy_packet_handle *)packet_mem;
-  uint8_t packet_send_status = 0x00;
-  uint8_t *data_offset = raw_data; /* Offset ptr for raw_data*/
+  static uint8_t packet_send_status = 0x00;
+  static uint8_t *data_offset = raw_data; /* Offset ptr for raw_data*/
 
   *(uint16_t *)dst_mac_addr = dst_mac_addr_u16;
   SYS_RAM_TRACE();
@@ -342,6 +343,7 @@ bool phy_layer_send_raw_data(uint16_t dst_mac_addr_u16, uint8_t *raw_data, uint1
     SRC_ADDR_COPY(last_mac_addr, dst_mac_addr);
     pr_debug("Tx addr not the same as last one,write new addr\n");
     phy_layer_set_dst_addr(dst_mac_addr);
+    debug_printf("set addr complete 2\n");
   }
   /* Slice 128 byte data to multiple parts, each one's max length is 29 byte */
   for (i = 0; i < packet->slice_size; i ++) {
@@ -361,10 +363,12 @@ bool phy_layer_send_raw_data(uint16_t dst_mac_addr_u16, uint8_t *raw_data, uint1
     memcpy(packet->data, data_offset, packet->length);
     data_offset += packet->length;
     //phy_packet_trace(packet);
+    debug_printf("^");
     xSemaphoreTake(rf_chip_use, portMAX_DELAY);
     send_result &= (uint8_t)phy_layer_send_slice_packet(packet, SOFTWARE_RETRY_RATIO);
     xSemaphoreGive(rf_chip_use);
     //phy_packet_trace(packet ,0);
+    debug_printf("&");
   }
   SYS_RAM_TRACE();
   packet_index = (packet_index + 1) % MAX_PACKET_INDEX;

@@ -34,6 +34,13 @@ typedef struct __mlme_start_confirm_handle
 	uint8_t status;
 } mlme_start_confirm_handle;
 
+typedef struct __mlme_associate_confirm_handle
+{
+  uint8_t status;
+  uint16_t assoc_short_addr;
+  uint8_t extended_panid[8];
+} mlme_associate_confirm_handle;
+
 typedef struct __mcps_data_confirm_handle {
   uint8_t status;
   uint8_t msdu_handle;
@@ -111,6 +118,9 @@ typedef struct __network_descriptor_handle {
   uint8_t end_device_capacity:1;
 } network_descriptor_handle;
 
+typedef struct __network_associate_handle {
+  uint8_t device_addr[8];
+} network_associate_handle;
 
 /* Currently, size of MAC_PIB_attributes = 24 */
 struct MAC_PIB_attributes_handle {
@@ -149,7 +159,8 @@ struct MAC_PIB_attributes_handle {
   uint8_t macTimestampSupported:1;
   uint8_t macPANCoordinator:1;// whether the device self is a PAN Coordinator
 
-  uint8_t  macCoordExtendedAddress[8];//0x4a 64bit IEEE addr
+  uint8_t  aExtendedAddress[8];//This device's ieee addr
+  uint8_t  macCoordExtendedAddress[8];//0x4a coord's 64bit IEEE addr
   uint8_t  macCoordShortAddress[2];//0x4b 16bit short address to coord which device associated
   uint16_t macPANId;//the 16 bit identifier of PAN, if the value is 0xffff then device is not associated
   uint16_t macShortAddress;// the 16 bit addr that device used to communicate in PAN,
@@ -195,5 +206,14 @@ void mcps_beacon_notify_indication(uint8_t bsn, uint8_t sdu_length, uint8_t *sdu
 void mcps_command_response(mpdu_frame_handle * mpdu_frame, uint8_t payload_size);
 
 void mcps_handle_beacon_request();
+
+void mlme_associate_indication(uint8_t *device_addr, uint8_t capability);
+
+void mlme_associate_request(uint8_t logical_channel, uint8_t channel_page,
+  uint16_t coord_pan_id, uint8_t *coord_addr, uint8_t capability);
+
+void mlme_associate_response(uint8_t *dev_addr, uint16_t assoc_short_addr, uint8_t status, uint8_t *extended_panid);
+
+void mlme_associate_confirm(uint16_t assoc_short_addr, uint8_t status, uint8_t *extended_panid);
 
 #endif

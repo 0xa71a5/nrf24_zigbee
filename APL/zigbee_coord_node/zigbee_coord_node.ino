@@ -62,10 +62,17 @@ void setup()
   debug_printf("Begin config!\n");
   node_identify = ZIGBEE_ROUTE;
 
-  phy_layer_init(0x0100);
+  phy_layer_init(0x0000);
   mac_layer_init();
   nwk_layer_init();
   apl_layer_init();
+
+  for (uint8_t i = 0; i < 7; i ++) {
+    nlme_set_request(nwkExtendedPANID[i], i);
+    mlme_set_request(aExtendedAddress[i], i);
+  }
+  nlme_set_request(nwkExtendedPANID[7], 0x00);
+  mlme_set_request(aExtendedAddress[7], 0x00);
 
 
   xTaskCreate(phy_layer_event_process, "rx_sv", 300,/*150 bytes stack*/
@@ -74,7 +81,7 @@ void setup()
   xTaskCreate(mac_layer_event_process, "mac_sv", 250+120,
     NULL, tskIDLE_PRIORITY + 2, NULL);
 
-  xTaskCreate(nwk_layer_event_process, "nwk_sv", 400+120,
+  xTaskCreate(nwk_layer_event_process, "nwk_sv", 400+300,
     NULL, tskIDLE_PRIORITY + 2, NULL);
 
   xTaskCreate(apl_layer_event_process, "apl_sv", 400,

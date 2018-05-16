@@ -49,8 +49,10 @@ void apl_layer_test(void *params)
 
   debug_printf("Enter apl_layer_test\n");
 
+  debug_printf("This is a router device,now not associated\n");
+/*
   debug_printf("apl layer call nlme_network_formation_request\n");
-    /* scan channels, scan duration, batter life ext */
+  // scan channels, scan duration, batter life ext
   nlme_network_formation_request(0, 100, 0);
 
   if (signal_wait(&formation_confirm_event_flag, 500)) {
@@ -62,7 +64,7 @@ void apl_layer_test(void *params)
   else {
     debug_printf("###formation failed!###\n\n");
   }
-
+*/
 
   while (1) {
     if (xQueueReceive(apl_indication_fifo, &indication, 1000)) {
@@ -93,6 +95,13 @@ void setup()
   mac_layer_init();
   nwk_layer_init();
   apl_layer_init();
+
+  for (uint8_t i = 0; i < 7; i ++) {
+    nlme_set_request(nwkExtendedPANID[i], i);
+    mlme_set_request(aExtendedAddress[i], i);
+  }
+  nlme_set_request(nwkExtendedPANID[7], 0x01);
+  mlme_set_request(aExtendedAddress[7], 0x01);
 
 
   xTaskCreate(phy_layer_event_process, "rx_sv", 300,/*150 bytes stack*/

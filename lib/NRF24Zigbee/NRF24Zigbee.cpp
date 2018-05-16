@@ -156,14 +156,17 @@ void nrf_set_rx_addr(uint8_t * addr) /* Sets the receiving address */
 
 void nrf_set_tx_addr(uint8_t * addr) /* Sets the transmitting address */
 {
-    uint8_t reverse_addr[NET_ADDR_LENGTH];
+    static uint8_t reverse_addr[NET_ADDR_LENGTH];
 
+    printf("nrf_set_tx_addr 0\n");
     /* RX_ADDR_P0 must be set to the sending addr for auto ack to work. */
-    for (int i = 0; i < NET_ADDR_LENGTH; i ++) {
+    for (uint8_t i = 0; i < NET_ADDR_LENGTH; i ++) {
         reverse_addr[i] = addr[NET_ADDR_LENGTH-i-1];
     }
     write_reg(RX_ADDR_P0, reverse_addr, NET_ADDR_LENGTH);
+    printf("nrf_set_tx_addr 1\n");
     write_reg(TX_ADDR, reverse_addr, NET_ADDR_LENGTH);
+    printf("nrf_set_tx_addr 2\n");
 }
 
 bool nrf_data_ready() /* Checks if data is available for reading */

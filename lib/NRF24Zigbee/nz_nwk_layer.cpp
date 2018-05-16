@@ -1,6 +1,7 @@
 #include "nz_nwk_layer.h"
 #include "nz_common.h"
 #include "event_fifo.h"
+#include "nz_apl_layer.h"
 
 QueueHandle_t nwk_confirm_fifo;
 QueueHandle_t nwk_indication_fifo;
@@ -8,6 +9,7 @@ QueueHandle_t nwk_indication_fifo;
 volatile uint8_t scan_confirm_event_flag = 0;
 volatile uint8_t start_confirm_event_flag = 0;
 volatile uint8_t data_confirm_event_flag = 0;
+volatile uint8_t assocation_confirm_event_flag = 0;
 
 #define BEACON_INDICATION_FIFO_SIZE 4
 event_node_handle event_pan_des_ptr_area[BEACON_INDICATION_FIFO_SIZE];
@@ -18,6 +20,11 @@ event_fifo_handle nwk_pan_descriptors_fifo;
 event_node_handle event_nwk_desc_ptr_area[NWK_DESCRIPTOR_FIFO_SIZE];
 network_descriptor_handle nwk_descriptors_mem[NWK_DESCRIPTOR_FIFO_SIZE];
 event_fifo_handle nwk_descriptors_fifo;
+
+#define NWK_ASSOC_FIFO_SIZE 4
+event_node_handle event_nwk_assoc_ptr_area[NWK_ASSOC_FIFO_SIZE];
+network_associate_handle nwk_assoc_mem[NWK_ASSOC_FIFO_SIZE];
+event_fifo_handle nwk_assoc_fifo;
 
 struct NWK_PIB_attributes_handle NWK_PIB_attributes;
 
@@ -31,6 +38,9 @@ void nwk_layer_init()
 
   event_fifo_init(&nwk_descriptors_fifo, event_nwk_desc_ptr_area,
   (uint8_t *)nwk_descriptors_mem, NWK_DESCRIPTOR_FIFO_SIZE, sizeof(network_descriptor_handle));
+
+  event_fifo_init(&nwk_assoc_fifo, event_nwk_assoc_ptr_area,
+  (uint8_t *)nwk_assoc_mem, NWK_ASSOC_FIFO_SIZE, sizeof(network_associate_handle));
 }
 
 void nlme_send_confirm_event(uint8_t confirm_type, void *ptr)
@@ -82,10 +92,12 @@ void nlme_network_formation_request(uint8_t scan_channels, uint8_t scan_duration
 
   debug_printf("Send start request to mac\n");
 
+  debug_printf("my nwk_extended_panid =");
   for (uint8_t i = 0; i < 8; i ++) {
-    nwk_extended_panid[i] = random(255);
+    debug_printf("%u.", nwk_extended_panid[i]);
     mlme_set_request(macBeaconPayload.nwk_extended_panid[i], nwk_extended_panid[i]);
   }
+  debug_printf("\n");
 
   mlme_set_request(macBeaconPayload.protocal_id, 0x00);
   mlme_set_request(macBeaconPayload.stack_profile, 0x00);
@@ -128,14 +140,17 @@ void nlme_network_formation_confirm(uint8_t status)
 static volatile mlme_scan_confirm_handle  *scan_confirm_ptr = NULL;
 static volatile mlme_start_confirm_handle *start_confirm_ptr = NULL;
 static volatile mcps_data_confirm_handle  *data_confirm_ptr = NULL;
+static volatile mlme_associate_confirm_handle *associate_confirm_ptr = NULL;
 
 void nwk_layer_event_process(void * params)
 {
   confirm_event event;
   static nwk_indication indication;
+  static network_associate_handle assoc_device;
   npdu_frame_handle * npdu_frame = (npdu_frame_handle *)indication.data;
   uint8_t payload_size = 0;
 
+  debug_printf("Enter nwk sv\n");
   while (1) {
     /* Handle confirm from mac layer */
     if (xQueueReceive(nwk_confirm_fifo, &event, 100)) {
@@ -162,6 +177,11 @@ void nwk_layer_event_process(void * params)
           data_confirm_event_flag = 1;
           data_confirm_ptr = (mcps_data_confirm_handle *)event.confirm_ptr;
         break;
+
+        case confirm_type_association:
+          assocation_confirm_event_flag = 1;
+          associate_confirm_ptr = (mlme_associate_confirm_handle *)event.confirm_ptr;
+        break;
       }
     }
 
@@ -175,8 +195,66 @@ void nwk_layer_event_process(void * params)
       //TODO : send indication to apl layer
     }
 
+    if (nwk_assoc_fifo.cur_size != 0) {
+      if (event_fifo_out(&nwk_assoc_fifo, &assoc_device)) {
+        debug_printf("nwk_sv:recv association indication ,last byte = 0x%02X\n", assoc_device.device_addr[7]);
+        //Dtermine whether or not accept this device ,if accept,send assoc response
+        nlme_association_handle(assoc_device.device_addr);
+      }
+ 
+    }
+
     vTaskDelay(1); 
   }
+}
+
+assocation_table_handle assocation_table;
+
+
+
+void nlme_association_handle(uint8_t *dev_addr)
+{
+  uint8_t a_invalid_index = 0xff;
+  
+  debug_printf("Search my assocation table ,judge if this device is in it.\n");
+
+  for (uint8_t i = 0; i < MAX_ASSOCIATION_ENTRY_SIZE; i ++) {
+    uint8_t *addr = assocation_table.entries[i].device_ieee_addr;
+    if (assocation_table.entries[i].valid) {
+
+      if ( addr[0]==dev_addr[0] && addr[1]==dev_addr[1] && addr[2]==dev_addr[2]
+            && addr[3]==dev_addr[3] && addr[4]==dev_addr[4] && addr[5]==dev_addr[5]
+              && addr[6]==dev_addr[6] && addr[7]==dev_addr[7]) {
+          debug_printf("Find device already in assocation table, response\n");
+          
+          mlme_associate_response(dev_addr, assocation_table.entries[i].alloc_addr, assocation_success, nlme_get_request(nwkExtendedPANID));
+
+          /* rejoin indication */
+          nlme_join_indication(assocation_table.entries[a_invalid_index].alloc_addr, dev_addr, 0, 1);
+          return;
+      }
+
+    }
+    else {
+      a_invalid_index = i;
+    }
+  }
+
+  if (a_invalid_index != 0xff) {
+    //Means we have empty entry to accept this one
+    assocation_table.entries[a_invalid_index].valid = 1;
+    memcpy(assocation_table.entries[a_invalid_index].device_ieee_addr, dev_addr, 8);
+    //TODO: Here we shall calculate a nwk addr to allocate to device 
+    assocation_table.entries[a_invalid_index].alloc_addr = (uint16_t)dev_addr[7];
+    mlme_associate_response(dev_addr, assocation_table.entries[a_invalid_index].alloc_addr, assocation_success,  nlme_get_request(nwkExtendedPANID));
+
+    nlme_join_indication(assocation_table.entries[a_invalid_index].alloc_addr, dev_addr, 0, 0);
+  }
+  else {
+    //In this case, we dont have enough space for this device,shall we return a response?
+    mlme_associate_response(dev_addr, 0xffff, pan_at_capacity, nlme_get_request(nwkExtendedPANID));
+  }
+
 }
 
 /* Dont use link quality and security */
@@ -257,20 +335,6 @@ void nlde_data_confirm(uint8_t status, uint8_t npdu_handle, uint32_t tx_time)
 
 extern volatile uint16_t restore_pan_id;
 
-void extended_panid_print(uint8_t *panid)
-{
-  //debug_printf("ex_panid=");
-  for (uint8_t i = 0; i < 8; i ++) {
-    if (i != 7) {
-      debug_printf("%u.", panid[i]);
-    }
-    else {
-      debug_printf("%u\n", panid[i]);
-    }
-  }
-}
-
-
 void nlme_network_discovery_request(uint32_t scan_channels, uint8_t scan_duration)
 {
   uint32_t start_time;
@@ -303,6 +367,7 @@ void nlme_network_discovery_request(uint32_t scan_channels, uint8_t scan_duratio
   nlme_network_discovery_confirm(scan_confirm_ptr->status);
 
   /*
+  //!!!This will trigger an error,dont know why
   if (nwk_pan_descriptors_fifo.cur_size != 0) {
     debug_printf("Got %u pan_descriptors!\n", nwk_pan_descriptors_fifo.cur_size);
     debug_printf("###### PAN DESCRIPTOR PRINT ######\n");
@@ -341,5 +406,48 @@ void nlme_network_discovery_confirm(uint8_t status)
   confirm.status = status;
   nlme_send_confirm_event(confirm_type_nwk_discovery, &confirm);
   debug_printf("nlme_nwk_discovery_confirm %u\n", status);
+}
+
+// We ignore security_enable param
+void nlme_join_request(uint8_t *extended_panid, uint8_t rejoin_network, uint16_t short_panid,
+  uint8_t scan_duration, uint8_t capability)
+{
+  //TODO: Judge current join status and rejoin param
+  //TODO: get panId
+  mlme_associate_request(0, 0, short_panid, extended_panid, capability);
+  //wait for join result.
+
+  if (signal_wait(&assocation_confirm_event_flag, 1200)) {
+    debug_printf("nlme join got confirm\n");
+    nlme_join_confirm(associate_confirm_ptr->status, associate_confirm_ptr->assoc_short_addr, associate_confirm_ptr->extended_panid, 0);
+  }
+  else {
+    debug_printf("nlme join timeout\n");
+    nlme_join_confirm(pan_access_denied, 0xffff, nlme_get_request(nwkExtendedPANID), 0);
+  }
+
+}
+
+void nlme_join_confirm(uint8_t status, uint16_t nwk_addr, uint8_t *extended_panid, uint8_t active_channel)
+{
+  static nlme_join_confirm_handle confirm;
+
+  confirm.status = status;
+  confirm.nwk_addr = nwk_addr;
+  memcpy(confirm.extended_panid, extended_panid, 8);
+  confirm.active_channel = active_channel;
+  nlme_send_confirm_event(confirm_type_join, &confirm);
+}
+
+void nlme_join_indication(uint16_t nwk_addr, uint8_t *extended_addr, uint8_t capability, uint8_t rejoin_network)
+{
+  static nwk_join_indication_handle indication;
+  
+  indication.nwk_addr = nwk_addr;
+  memcpy(indication.extended_addr, extended_addr, 8);
+  indication.capability = capability;
+  indication.rejoin_network = rejoin_network;
+  debug_printf("nlme_join_indication nwk_addr=0x%04X\n", nwk_addr);
+  event_fifo_in(&nwk_join_ind_fifo, (uint8_t *)&indication);
 }
 

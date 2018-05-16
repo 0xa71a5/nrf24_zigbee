@@ -27,7 +27,7 @@ typedef struct __rx_fifo_handle
     uint8_t cur_size;
 } rx_fifo_handle;
 
-#define MAX_FIFO_SIZE 3
+#define MAX_FIFO_SIZE 2
 #define SRC_ADDR_COPY(dst,src) (*(uint16_t *)dst) = (*(uint16_t *)src)
 
 inline void copy_node(rx_node_handle *dst, rx_node_handle *src);

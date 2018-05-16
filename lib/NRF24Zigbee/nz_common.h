@@ -12,7 +12,8 @@ typedef struct __confirm_event
 
 bool signal_wait(volatile uint8_t * signal, uint16_t delay_time = 100);
 bool wait_event(volatile uint8_t * event_ptr, uint16_t delay_time = 100);
-
+void print_buffer(uint8_t *buff, uint16_t length);
+void extended_panid_print(uint8_t *panid);
 /* Definition of status */
 #define SUCCESS 				0
 #define LIMIT_REACHED 			1
@@ -47,6 +48,8 @@ enum confirm_types {
   	confirm_type_formation,
     confirm_type_nwk_discovery,
   	confirm_type_data_confirm,
+    confirm_type_association,
+    confirm_type_join,
 };
 
 
@@ -95,6 +98,40 @@ typedef struct __mpdu_frame_handle {
   uint16_t src_addr;
   uint8_t payload[0];
 } mpdu_frame_handle;
+
+typedef struct __mpdu_frame_handle_d16_s64 {
+  uint16_t crc;/* This is not like protocal */
+  mpdu_frame_control frame_control;
+  uint8_t seq;
+  uint16_t dst_pan_id;
+  uint16_t dst_addr;
+  uint16_t src_pan_id;
+  uint8_t src_addr[8];
+  uint8_t payload[0];
+} mpdu_frame_d16_s64;
+
+typedef struct __mpdu_frame_handle_d64_s64 {
+  uint16_t crc;/* This is not like protocal */
+  mpdu_frame_control frame_control;
+  uint8_t seq;
+  uint16_t dst_pan_id;
+  uint8_t dst_addr[8];
+  uint16_t src_pan_id;
+  uint8_t src_addr[8];
+  uint8_t payload[0];
+} mpdu_frame_d64_s64;
+
+typedef struct __mpdu_frame_handle_d64_s16 {
+  uint16_t crc;/* This is not like protocal */
+  mpdu_frame_control frame_control;
+  uint8_t seq;
+  uint16_t dst_pan_id;
+  uint8_t dst_addr[8];
+  uint16_t src_pan_id;
+  uint16_t src_addr;
+  uint8_t payload[0];
+} mpdu_frame_d64_s16;
+
 
 typedef struct __mpdu_beacon_frame_handle {
   uint16_t crc;

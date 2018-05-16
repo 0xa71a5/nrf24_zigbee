@@ -1,4 +1,3 @@
-
 MAC Layer笔记：
 
 1.【Active Scan】
@@ -64,6 +63,17 @@ nwk discovery首先进行activescan，然后会在一定时间内持续接受bea
 不同版本的avr-gcc编译器 编译出来的程序固件差异不小
 使用1.8.5版本编译器  3584字节，(43%)的动态内存
 使用1.6.8版本编译器  4416字节，(53%)的动态内存
+
+3.【join a network 加入网络】
+加入网络首先执行的原语是network-discovery，应用层收到network-discovery-confirm的原语之后，开始读取被discovery过程更新过的邻居表然后找到一个合适的母设备来加入。可被选择为父设备的条件有很多，常见的如根据邻居表判断周边的coord或者router的permit-join域是否为true，或者从可加入的所有设备中选择距离coord连接深度最小的节点等。
+
+当一个设备成功加入网络时，if it is a router and the next higher layer has issued a NLME-START-ROUTER.request, the NWK layer shall issue the MLME-START.request and The PANId, LogicalChannel, BeaconOrder and SuperframeOrder parameters shall be set equal to the corresponding values held in the neighbor table entry for its parent. 
+
+The network depth is set to one more than the parent network depth
+
+The PANCoordinator and CoordRealignment parameters shall both be set to FALSE. 
+extendedPanId将会被设置成所加入网络的64bit extendedPanId。
+
 
 
 

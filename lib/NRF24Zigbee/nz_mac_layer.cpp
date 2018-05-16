@@ -41,8 +41,8 @@ void mlme_scan_request(uint8_t scan_type, uint32_t scan_channels, uint8_t scan_d
     // Send out active scan request beacon
     cmd_frame.frame_control.frame_type = mac_frame_type_command;
     cmd_frame.frame_control.dst_addr_mode = mac_addr_16bits;
+    cmd_frame.frame_control.src_addr_mode = mac_addr_16bits;
     // TODO: src addr shall be comprised
-    //cmd_frame.frame_control.src_addr_mode = mac_addr_no_present;
     cmd_frame.dst_pan_id = 0xffff;
     cmd_frame.dst_addr = 0xffff;
     cmd_frame.payload[0] = beacon_request;
@@ -117,7 +117,6 @@ void mac_layer_event_process(void * params)
 
     if ((data_length = phy_layer_fifo_top_node_size()) > 0) {
       data_length = phy_layer_fifo_pop_data(data);
-
       // TODO : DSN
       if (mpdu_frame->frame_control.frame_type == mac_frame_type_data) {
         payload_size = data_length - sizeof(mpdu_frame_handle);
@@ -155,8 +154,51 @@ void mac_layer_event_process(void * params)
   }
 }
 
+void mlme_associate_indication(uint8_t *device_addr, uint8_t capability)
+{
+  debug_printf("mlme_associate_indication device_addr=\n");
+  extended_panid_print(device_addr);
+
+  event_fifo_in(&nwk_assoc_fifo, device_addr);
+}
+
+#define ASSOCIATION_RESPONSE_FRAME_SIZE (sizeof(mpdu_frame_d64_s16) + 4 + 8)
+static uint8_t association_result_payload_mem[ASSOCIATION_RESPONSE_FRAME_SIZE] = {0};
+static mpdu_frame_d64_s16 *association_result_payload = (mpdu_frame_d64_s16 *)association_result_payload_mem;
+volatile uint8_t assocation_response_signal = 0;
+
+
+void mlme_associate_response(uint8_t *dev_addr, uint16_t assoc_short_addr, uint8_t status, uint8_t *extended_panid)
+{
+  static uint8_t assocation_mem[ASSOCIATION_RESPONSE_FRAME_SIZE];
+  mpdu_frame_d64_s16  *resp_frame = (mpdu_frame_d64_s16  *)assocation_mem;
+
+  resp_frame->frame_control.frame_type = mac_frame_type_command;
+  resp_frame->frame_control.frame_pending = 0;
+  resp_frame->frame_control.ack_request = 0;
+  resp_frame->frame_control.dst_addr_mode = mac_addr_64bits;
+  resp_frame->frame_control.src_addr_mode = mac_addr_64bits;
+
+  resp_frame->dst_pan_id = 0xffff;
+  memcpy(resp_frame->dst_addr, dev_addr, 8);
+  resp_frame->src_pan_id = mlme_get_request(macPANId);
+  memcpy(resp_frame->src_addr, mlme_get_request(aExtendedAddress), 8);
+
+  resp_frame->payload[0] = association_response;
+  *(uint16_t *)&resp_frame->payload[1] = assoc_short_addr;
+  resp_frame->payload[3] = status;
+  memcpy((uint8_t *)&resp_frame->payload[4], extended_panid, 8);
+
+  debug_printf("mlme_associate_response to device\n");
+  phy_layer_send_raw_data(DEFAULT_BROADCAST_ADDR, (uint8_t *)resp_frame, ASSOCIATION_RESPONSE_FRAME_SIZE);
+  debug_printf("mlme_associate_response completed!\n");
+}
+
+
 void mcps_command_response(mpdu_frame_handle * mpdu_frame, uint8_t payload_size)
 {
+  mpdu_frame_d64_s64 *mpdu_assoc_frame = (mpdu_frame_d64_s64 *)mpdu_frame;
+
   if (mpdu_frame->frame_control.frame_type != mac_frame_type_command) {
     debug_printf("This is not a command frame,ignore\n");
     return;
@@ -165,55 +207,47 @@ void mcps_command_response(mpdu_frame_handle * mpdu_frame, uint8_t payload_size)
   if (payload_size == 0) {
     debug_printf("command frame payload size == 0,ignore\n");
   }
-
-  switch (mpdu_frame->payload[0]) {
-    case association_request:
-      debug_printf("handle association_request\n");
-    break;
-
-    case association_response:
-      debug_printf("handle association_response\n");
-    break;
-
-    case disassociation_notification:
-      debug_printf("handle disassociation_notification\n");
-    break;
-
-    case data_request:
-      debug_printf("handle data_request\n");
-    break;
-
-    case pan_id_conflic_notification:
-      debug_printf("handle pan_id_conflic_notification\n");
-    break;
-
-    case orphan_notification:
-      debug_printf("handle orphan_notification\n");
-    break;
-
-    case beacon_request:
-      // TODO: Judge if this device is a coord ,otherwise it shouldnt handle beacon request
+  
+  if (mpdu_frame->frame_control.src_addr_mode == mac_addr_16bits) {
+    /* beacon request */
+    if (mpdu_frame->payload[0] == beacon_request) {
       debug_printf("handle beacon_request\n");
       if (mlme_get_request(macPANCoordinator))
         mcps_handle_beacon_request();
       else
         debug_printf("This device is not coord ,ignore beacon request\n");
-
-    break;
-
-    case coordinator_realignment:
-      debug_printf("handle coordinator_realignment\n");
-    break;
-
-    case gts_request:
-      debug_printf("handle gts_request\n");
-    break;
-
-    default:
-      debug_printf("Unknow command type!\n");
+    }
+    else {
+      debug_printf("payload_size=1 but dont know this becon type\n");
+    }
   }
 
+  else if (mpdu_frame->frame_control.dst_addr_mode == mac_addr_64bits &&
+    mpdu_frame->frame_control.src_addr_mode == mac_addr_64bits) {
+//TODO: judge if this is my ieee addr
+    if (mpdu_assoc_frame->payload[0] == association_request) {
+      debug_printf("handle association_request from addr :");
+      for (uint8_t i =0; i < 8; i ++)
+        debug_printf("%u.", mpdu_assoc_frame->src_addr[i]);
+      debug_printf("\n");
+      mlme_associate_indication(mpdu_assoc_frame->src_addr, mpdu_assoc_frame->payload[1]);
+    }
+    else if (mpdu_assoc_frame->payload[0] == association_response) {
+      debug_printf("handle association response,call mlme_associate_confirm\n");
+
+      memcpy((uint8_t *)association_result_payload, (uint8_t *)mpdu_assoc_frame, ASSOCIATION_RESPONSE_FRAME_SIZE);
+      assocation_response_signal = 1;
+    }
+  }
+
+  else {
+    debug_printf("###Dont know how to handle this in line 202\n");
+    debug_printf("dst_addr_mode=%u src_addr_mode=%u frame_control=0x%04X\n", 
+      mpdu_frame->frame_control.dst_addr_mode, mpdu_frame->frame_control.src_addr_mode, *(uint16_t *)&mpdu_frame->frame_control);
+  }
 }
+
+
 
 void mcps_handle_beacon_request()
 {
@@ -230,6 +264,7 @@ void mcps_handle_beacon_request()
 
   beacon->frame_control.frame_type = mac_frame_type_beacon;
   beacon->frame_control.frame_pending = 0;
+  beacon->frame_control.dst_addr_mode = mac_addr_16bits;
   beacon->frame_control.src_addr_mode = mac_addr_16bits;
 
   beacon->seq ++;
@@ -385,4 +420,63 @@ void mcps_data_indication(uint8_t src_addr_mode, uint16_t src_pan_id, uint16_t s
     debug_printf("dst_pan_id=0x%04X ; my macPANId=0x%04X\n", dst_pan_id, mlme_get_request(macPANId));
   }
 
+}
+
+// ignore security level param
+void mlme_associate_request(uint8_t logical_channel, uint8_t channel_page,
+  uint16_t coord_pan_id, uint8_t *coord_addr, uint8_t capability)
+{
+  //coord_addr_mode = 2 => 16bit mode ; 3=>64bit mode
+  //Firstly, generate an associate request command 7.3.1
+  static uint8_t cmd_frame_mem[sizeof(mpdu_frame_d64_s64) + 2] = {0};
+  uint8_t to_send_size = sizeof(mpdu_frame_d64_s64) + 2;
+
+  mpdu_frame_d64_s64 *cmd_frame = (mpdu_frame_d64_s64 *)cmd_frame_mem;
+
+  //TODO: seq ++
+  cmd_frame->crc=0xabcd;
+  cmd_frame->frame_control.frame_type = mac_frame_type_command;
+  cmd_frame->frame_control.security_enable = 0;
+  cmd_frame->frame_control.frame_pending = 0;
+  cmd_frame->frame_control.ack_request = 0;
+  cmd_frame->frame_control.pan_id_compression = 0;
+  cmd_frame->frame_control.dst_addr_mode = mac_addr_64bits;
+  cmd_frame->frame_control.src_addr_mode = mac_addr_64bits;
+  cmd_frame->dst_pan_id = coord_pan_id;
+ 
+  cmd_frame->src_pan_id = 0xffff;
+  memcpy(cmd_frame->dst_addr, coord_addr, 8);
+  memcpy(cmd_frame->src_addr, mlme_get_request(aExtendedAddress), 8);
+
+  cmd_frame->payload[0] = association_request;
+  cmd_frame->payload[1] = capability;
+
+
+  debug_printf("call phy_layer_send_raw_data, broadcast mode,to_send_size=%u\n", to_send_size);
+  phy_layer_send_raw_data(DEFAULT_BROADCAST_ADDR, (uint8_t *)cmd_frame, to_send_size);
+  debug_printf("wait association response...\n");
+  //Wait for an ack and data frame(we can ignore this ack ,just send data)
+
+  if (signal_wait(&assocation_response_signal, 700)) {
+    debug_printf("Recv association response\n");
+    mlme_associate_confirm(*(uint16_t *)&association_result_payload->payload[1], association_result_payload->payload[3], (uint8_t *)&association_result_payload->payload[4]);
+  }
+  else {
+    debug_printf("Recv association timeout!\n");
+    mlme_associate_confirm(0xffff, pan_access_denied, NULL);
+  }
+  
+}
+
+void mlme_associate_confirm(uint16_t assoc_short_addr, uint8_t status, uint8_t *extended_panid)
+{
+  static mlme_associate_confirm_handle assoc_confirm;/* Set this to static ,cause we dont use malloc */
+
+  debug_printf("mlme_associate_confirm , assoc_short_addr=0x%04X status=%u\n", assoc_short_addr, status);
+
+  assoc_confirm.status = status;
+  assoc_confirm.assoc_short_addr = assoc_short_addr;
+  if (extended_panid!=NULL)
+    memcpy(assoc_confirm.extended_panid, extended_panid, 8);
+  mlme_send_confirm_event(confirm_type_association, &assoc_confirm);
 }
