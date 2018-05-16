@@ -4,12 +4,12 @@
 #include "NRF24Zigbee.h"
 #include <FreeRTOS_AVR.h>
 #include "nz_common.h"
-#include "nz_apl_layer.h"
+//#include "nz_apl_layer.h"
 #include "nz_mac_layer.h"
 
 #define STARTUP_FAILURE 20
-#define NWK_CONFIRM_FIFO_SIZE 3
-#define NWK_INDICATION_FIFO_SIZE 3
+#define NWK_CONFIRM_FIFO_SIZE 2
+#define NWK_INDICATION_FIFO_SIZE 2
 #define FORMATION_CONFIRM_TIMEOUT 100
 
 
@@ -17,13 +17,26 @@ extern QueueHandle_t nwk_confirm_fifo;
 extern QueueHandle_t nwk_indication_fifo;
 extern event_fifo_handle nwk_pan_descriptors_fifo;
 extern event_fifo_handle nwk_descriptors_fifo;
+extern event_fifo_handle nwk_assoc_fifo;
+
 
 #define nlme_set_request(perp_name, value) NWK_PIB_attributes.perp_name = value
 /* We dont use set_confirm , cause this is some kind a waste */
 #define nlme_get_request(perp_name) NWK_PIB_attributes.perp_name
 
+typedef struct __assocation_entry {
+  uint8_t device_ieee_addr[8];
+  uint16_t alloc_addr;
+  uint8_t valid;
+} assocation_entry_handle;
 
+#define MAX_ASSOCIATION_ENTRY_SIZE 4
 
+typedef struct __assocation_table {
+  assocation_entry_handle entries[MAX_ASSOCIATION_ENTRY_SIZE];
+} assocation_table_handle;
+
+extern assocation_table_handle assocation_table;
 
 
 typedef struct __nlme_formation_confirm_handle
@@ -36,7 +49,13 @@ typedef struct __nlme_nwk_discovery_confirm_handle
 	uint8_t status;
 } nlme_nwk_discovery_confirm_handle;
 
-
+typedef struct __nlme_join_confirm_handle
+{
+	uint8_t status;
+	uint16_t nwk_addr;
+	uint8_t extended_panid[8];
+	uint8_t active_channel;
+} nlme_join_confirm_handle;
 
 extern volatile nlme_formation_confirm_handle *apl_data_confirm_ptr;
 
@@ -87,6 +106,12 @@ struct NWK_PIB_attributes_handle {
 	uint8_t nwkLeaveRequestAllowed:1;
 };
 
+enum association_status {
+  assocation_success = 0,
+  pan_at_capacity,
+  pan_access_denied
+};
+
 
 enum nwk_frame_type {
   nwk_frame_type_data = 0,
@@ -118,13 +143,17 @@ typedef struct __nlde_data_confirm_handle {
 	uint32_t tx_time;
 } nlde_data_confirm_handle;
 
-typedef struct __nwk_indicaiton_handle
-{
+typedef struct __nwk_indicaiton_handle {
 	uint8_t length;
 	uint8_t data[NPDU_MAX_SIZE];
 } nwk_indication;
 
-
+typedef struct __nwk_join_indication_handle {
+	uint16_t nwk_addr;
+	uint8_t extended_addr[8];
+	uint8_t capability;
+	uint8_t rejoin_network;
+} nwk_join_indication_handle;
 
 void nwk_layer_init();
 void nlme_send_confirm_event(uint8_t confirm_type, void *ptr);
@@ -139,5 +168,9 @@ void nlde_data_indication(uint8_t dst_addr_mode, uint16_t dst_addr, uint16_t src
   uint8_t nsdu_length, uint8_t *nsdu, uint32_t rx_time);
 void nlme_network_discovery_request(uint32_t scan_channels, uint8_t scan_duration);
 void nlme_network_discovery_confirm(uint8_t status);
-
+void nlme_join_request(uint8_t *extended_panid, uint8_t rejoin_network, uint16_t short_panid,
+  uint8_t scan_duration, uint8_t capability);
+void nlme_join_indication(uint16_t nwk_addr, uint8_t *extended_addr, uint8_t capability, uint8_t rejoin_network);
+void nlme_join_confirm(uint8_t status, uint16_t nwk_addr, uint8_t *extended_panid, uint8_t active_channel);
+void nlme_association_handle(uint8_t *dev_addr);
 #endif

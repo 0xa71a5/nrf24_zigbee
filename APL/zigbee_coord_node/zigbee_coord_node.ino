@@ -9,13 +9,6 @@
 
 
 
-
-TaskHandle_t task_rx_server_handle;
-TaskHandle_t task_rx_get_data_handle;
-TaskHandle_t task_tx_server_handle;
-
-
-
 void apl_layer_test(void *params)
 {
   uint32_t record_time;
@@ -54,6 +47,44 @@ void apl_layer_test(void *params)
 
 }
 
+TaskHandle_t phy_task;
+TaskHandle_t mac_task;
+TaskHandle_t nwk_task;
+TaskHandle_t apl_task;
+TaskHandle_t app_task;
+
+extern SemaphoreHandle_t rf_chip_use;
+extern SemaphoreHandle_t phy_rx_fifo_sem;
+
+static void vPrintTask(void *pvParameters) {
+  debug_printf("Enter vPrintTask\n");
+  while (1) {
+    // Sleep for one second.
+    vTaskDelay(70);
+    debug_printf("Unused:%u %u %u %u %u [%u][%u]\n", uxTaskGetStackHighWaterMark(phy_task),
+      uxTaskGetStackHighWaterMark(mac_task),
+      uxTaskGetStackHighWaterMark(nwk_task),
+      uxTaskGetStackHighWaterMark(apl_task),
+      uxTaskGetStackHighWaterMark(app_task),
+      (uint16_t)xSemaphoreGetMutexHolder(rf_chip_use),
+      (uint16_t)xSemaphoreGetMutexHolder(phy_rx_fifo_sem));
+  }
+}
+
+#define mac_task_stack_size (370+100)
+uint8_t mac_task_stack[mac_task_stack_size];
+
+#define nwk_task_stack_size (450+100)
+uint8_t nwk_task_stack[nwk_task_stack_size];
+
+#define apl_task_stack_size (400-100)
+uint8_t apl_task_stack[apl_task_stack_size];
+
+#define app_task_stack_size (400-100)
+uint8_t app_task_stack[app_task_stack_size];
+
+#define print_task_stack_size 150
+uint8_t print_task_stack[print_task_stack_size];
 
 void setup()
 {
@@ -62,29 +93,36 @@ void setup()
   debug_printf("Begin config!\n");
   node_identify = ZIGBEE_ROUTE;
 
-  phy_layer_init(0x0100);
+  phy_layer_init(0x0000);
   mac_layer_init();
   nwk_layer_init();
   apl_layer_init();
 
+  for (uint8_t i = 0; i < 7; i ++) {
+    nlme_set_request(nwkExtendedPANID[i], i);
+    mlme_set_request(aExtendedAddress[i], i);
+  }
+  nlme_set_request(nwkExtendedPANID[7], 0x00);
+  mlme_set_request(aExtendedAddress[7], 0x00);
 
-  xTaskCreate(phy_layer_event_process, "rx_sv", 300,/*150 bytes stack*/
-    NULL, tskIDLE_PRIORITY + 2, &task_rx_server_handle); //Used: 580 bytes stack
 
-  xTaskCreate(mac_layer_event_process, "mac_sv", 250+120,
-    NULL, tskIDLE_PRIORITY + 2, NULL);
+  //xTaskCreate(phy_layer_event_process, "rx_sv", 300+50,/*150 bytes stack*/
+    //NULL, tskIDLE_PRIORITY + 2, &phy_task); //Used: 580 bytes stack
 
-  xTaskCreate(nwk_layer_event_process, "nwk_sv", 400+120,
-    NULL, tskIDLE_PRIORITY + 2, NULL);
+  xTaskCreate2(mac_layer_event_process, "mac_sv", mac_task_stack_size,
+    NULL, tskIDLE_PRIORITY + 2, &mac_task, mac_task_stack);
 
-  xTaskCreate(apl_layer_event_process, "apl_sv", 400,
-    NULL, tskIDLE_PRIORITY + 2, NULL);
+  xTaskCreate2(nwk_layer_event_process, "nwk_sv", nwk_task_stack_size,
+    NULL, tskIDLE_PRIORITY + 2, &nwk_task, nwk_task_stack);
 
-  xTaskCreate(apl_layer_test, "apl_test", 400,
-    NULL, tskIDLE_PRIORITY + 2, NULL);
+  xTaskCreate2(apl_layer_event_process, "apl_sv", apl_task_stack_size,
+    NULL, tskIDLE_PRIORITY + 2, &apl_task, apl_task_stack);
 
-  //xTaskCreate(send_packet_test, "tx_sv", 350, 
-    //NULL, tskIDLE_PRIORITY + 2, &task_tx_server_handle);//Used 327 byte
+  xTaskCreate2(apl_layer_test, "apl_test", app_task_stack_size,
+    NULL, tskIDLE_PRIORITY + 2, &app_task, app_task_stack);
+
+  xTaskCreate2(vPrintTask, "printstack", print_task_stack_size, 
+    NULL, tskIDLE_PRIORITY + 2, NULL, print_task_stack);
 
   debug_printf("Zigbee network starts!\n");
   vTaskStartScheduler();
