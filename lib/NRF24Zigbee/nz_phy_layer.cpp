@@ -208,6 +208,7 @@ void phy_layer_listener(void)
             pr_err("expect_status=0x%02X, missed_slices=0x%02X\n", 
                                               expect_status, missed_slices);
             DISBALE_LOG_OUTPUT();
+            debug_printf("phy got new missed\n");
           }
           else {
             /* Make best efforts to send success ack to sender */
@@ -216,6 +217,9 @@ void phy_layer_listener(void)
             phy_layer_test_and_copy(packet, phy_rx_node);
             phy_rx_node->node_status = NODE_VALID;
             phy_rx_node->length = (packet->slice_size-1) * MAX_PACKET_DATA_SIZE + packet->length;
+            
+            uint8_t sizes = phy_layer_fifo_top_node_size();
+            debug_printf("phy got new %u %u %u %u\n", sizes, phy_rx_node->length, packet->slice_size, packet->length);
           }
           fifo_traverse(&fifo_instance);
           SYS_RAM_TRACE();
@@ -309,12 +313,13 @@ void phy_layer_get_src_addr(uint8_t src_addr[2])
 
 void phy_layer_set_dst_addr(uint8_t *addr)
 {
-  uint8_t mac_addr[5] = {PUBLIC_MAC_ADDR_0, PUBLIC_MAC_ADDR_1, PUBLIC_MAC_ADDR_2, addr[0], addr[1]};
+  static uint8_t mac_addr[5] = {PUBLIC_MAC_ADDR_0, PUBLIC_MAC_ADDR_1, PUBLIC_MAC_ADDR_2, addr[0], addr[1]};
+  pr_debug("set_addr\n");
   nrf_set_tx_addr(mac_addr);
 }
 
 
-bool phy_layer_send_raw_data(uint16_t dst_mac_addr_u16, uint8_t *raw_data, uint32_t length)
+bool phy_layer_send_raw_data(uint16_t dst_mac_addr_u16, uint8_t *raw_data, uint16_t length)
 {
   uint8_t compare_flag = 0;
   uint8_t i;
@@ -333,13 +338,11 @@ bool phy_layer_send_raw_data(uint16_t dst_mac_addr_u16, uint8_t *raw_data, uint3
   packet->slice_size = length / MAX_PACKET_DATA_SIZE + 
                       ((length % MAX_PACKET_DATA_SIZE) != 0);
   phy_layer_get_src_addr(packet->src_addr);
-
   if (*(uint16_t *)dst_mac_addr != *(uint16_t *)last_mac_addr) {
     SRC_ADDR_COPY(last_mac_addr, dst_mac_addr);
     pr_debug("Tx addr not the same as last one,write new addr\n");
     phy_layer_set_dst_addr(dst_mac_addr);
   }
-
   /* Slice 128 byte data to multiple parts, each one's max length is 29 byte */
   for (i = 0; i < packet->slice_size; i ++) {
     if (i != packet->slice_size - 1) /* If not the last pack, than 
@@ -349,9 +352,9 @@ bool phy_layer_send_raw_data(uint16_t dst_mac_addr_u16, uint8_t *raw_data, uint3
     }
     else /*If is the last pack, choose remain not sending data size as length */
     {
-      packet->length = length % MAX_PACKET_DATA_SIZE; 
-    }  
-   
+      packet->length = (length == MAX_PACKET_DATA_SIZE) ? length : length % MAX_PACKET_DATA_SIZE;
+    }
+    
     packet->slice_index = i;
     /* We just calculate header crc */
     packet->crc = crc_calculate((uint8_t *)packet, PHY_PACKET_HEADER_SIZE);
@@ -363,10 +366,8 @@ bool phy_layer_send_raw_data(uint16_t dst_mac_addr_u16, uint8_t *raw_data, uint3
     xSemaphoreGive(rf_chip_use);
     //phy_packet_trace(packet ,0);
   }
-
   SYS_RAM_TRACE();
   packet_index = (packet_index + 1) % MAX_PACKET_INDEX;
-
   return send_result;
 }
 

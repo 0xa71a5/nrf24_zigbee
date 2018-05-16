@@ -32,7 +32,7 @@ uint16_t phy_layer_fifo_pop_data(uint8_t *data, uint16_t max_length = 128);
 void phy_layer_set_src_addr(uint8_t src_addr[2]);
 void phy_layer_get_src_addr(uint8_t src_addr[2]);
 void phy_layer_set_dst_addr(uint16_t addr);
-bool phy_layer_send_raw_data(uint16_t dst_mac_addr_u16, uint8_t *raw_data, uint32_t length);
+bool phy_layer_send_raw_data(uint16_t dst_mac_addr_u16, uint8_t *raw_data, uint16_t length);
 uint16_t phy_layer_fifo_availables(void);
 void phy_layer_event_process(void *params);
 #endif
