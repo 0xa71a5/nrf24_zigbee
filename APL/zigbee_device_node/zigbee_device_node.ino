@@ -37,23 +37,22 @@ static void send_packet_test(void *params)
   }
 }
 
+extern volatile nlme_nwk_discovery_confirm_handle *apl_nwk_discovery_ptr;
+
 void apl_layer_test(void *params)
 {
   uint32_t record_time;
   static apl_indication indication;
   #define apl_data_length 45
   static uint8_t apl_data[apl_data_length];
+  static network_descriptor_handle nwk_descriptor;
 
   uint16_t dst_addr = 0x0100;
   uint8_t handle = random(255);
 
   debug_printf("Enter apl_layer_test\n");
 
-
   /* only coord needs to formation */
-  //debug_printf("apl layer call nlme_network_formation_request\n");
-  //nlme_network_formation_request(0, 100, 0);
-
   while (1) {
     if (xQueueReceive(apl_indication_fifo, &indication, 1000)) {
       debug_printf("app:recv msg,data_size=%u data=[%s] \n\n", indication.length, indication.data);
@@ -63,8 +62,21 @@ void apl_layer_test(void *params)
 
     if (Serial.available()) {
       Serial.read();
-      debug_printf("\nCall nlme_network_discovery_request\n");
+      debug_printf("\nCall nlme_network_discovery_request####\n");
       nlme_network_discovery_request(0, 100);
+      if (signal_wait(&apl_nwk_discovery_event_flag, 2000)) {
+      //if (wait_event((uint8_t *)apl_nwk_discovery_ptr, 2000)) {
+        debug_printf("apl:Got nwk discovery confirm %u\n", apl_nwk_discovery_ptr->status);
+      }
+      else {
+        debug_printf("apl: wait nwk discovery timeout\n");
+      }
+
+      debug_printf("Got nwk_descriptor size %u\n", nwk_descriptors_fifo.cur_size);
+      while(event_fifo_out(&nwk_descriptors_fifo, &nwk_descriptor)) {
+          debug_printf("NWK descriptor: perimit_join=%u router_capacity=%u ext_panid=", nwk_descriptor.permit_joining, nwk_descriptor.router_capacity);
+      }
+
     }
 
   }
@@ -74,9 +86,8 @@ void apl_layer_test(void *params)
     vTaskDelay(500);
 
     debug_printf("call nlde_data_request\n");
-    sprintf(apl_data, "Network time broadcast %u", millis());
+    sprintf((char *)apl_data, "Network time broadcast %u", millis());
     nlde_data_request(dst_addr, apl_data_length, apl_data, handle, 0, 0);
-
     if (signal_wait(&apl_data_confirm_event_flag, 500)) {
       if (!apl_data_confirm_ptr->status)
         debug_printf("Got data request confirm\n");
@@ -114,7 +125,7 @@ void setup()
   xTaskCreate(nwk_layer_event_process, "nwk_sv", 400,
     NULL, tskIDLE_PRIORITY + 2, NULL);
 
-  xTaskCreate(apl_layer_event_process, "apl_sv", 400,
+  xTaskCreate(apl_layer_event_process, "apl_sv", 400+50,
     NULL, tskIDLE_PRIORITY + 2, NULL);
 
   xTaskCreate(apl_layer_test, "apl_test", 400,

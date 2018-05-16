@@ -3,7 +3,6 @@
 
 #include "NRF24Zigbee.h"
 #include <FreeRTOS_AVR.h>
-#include "nz_nwk_layer.h"
 #include "nz_common.h"
 
 //MLME-SCAN
@@ -14,19 +13,7 @@ enum mlme_scan_type {
   orphan_scan,
 };
 
-/* Definition of status */
-#define SUCCESS 				0
-#define LIMIT_REACHED 			1
-#define NO_BEACON 				2
-#define SCAN_IN_PROGRESS		3
-#define COUNTER_ERROR			4
-#define FRAME_TOO_LONG			5
-#define UNAVAILABLE_KEY 		6
-#define UNSUPPORTED_SECURITY	7
-#define INVALID_PARAMETER 		8
-#define NO_SHORT_ADDRESS 		9
-#define	TRACKING_OFF			10
-#define	CHANNEL_ACCESS_FAILURE	11
+
 
 
 #define MAX_PAN_FIND 3
@@ -47,14 +34,86 @@ typedef struct __mlme_start_confirm_handle
 	uint8_t status;
 } mlme_start_confirm_handle;
 
-enum mac_confirm_type_enum {
-  confirm_type_scan = 0,
-  confirm_type_set,
-  confirm_type_start,
+typedef struct __mcps_data_confirm_handle {
+  uint8_t status;
+  uint8_t msdu_handle;
+  uint32_t time_stamp;
+} mcps_data_confirm_handle;
+
+enum coord_addr_mode_enum {
+  addr_16_bit = 2,
+  addr_64_bit = 3,
 };
 
+typedef struct __pan_descriptor_16 {
+  uint8_t coord_addr_mode:2;
+  uint8_t gts_perimit:1;
+  uint8_t link_quality:5;
+  uint16_t coord_pan_id;
+  uint16_t coord_addr;
+  uint8_t logical_channel;
+  uint8_t channel_page;
+  uint8_t superframe_spec;
+  uint32_t time_stamp;
+} pan_descriptor_16_handle;
+
+typedef struct __pan_descriptor_64 {
+  uint8_t coord_addr_mode:2;
+  uint8_t gts_perimit:1;
+  uint8_t link_quality:5;
+  uint16_t coord_pan_id;
+  uint8_t coord_addr[8];
+  uint8_t logical_channel;
+  uint8_t channel_page;
+  uint8_t superframe_spec;
+  uint32_t time_stamp;
+} pan_descriptor_64_handle;
+
+typedef struct __pending_addr_list {
+  uint8_t size;
+  uint16_t addr[0];
+} pending_addr_list;
+
+typedef struct __mac_beacon_payload_handle {
+  uint8_t protocal_id:8;
+  uint8_t stack_profile:4;
+  uint8_t nwk_protocal_version:4;
+  uint8_t reserved:2;
+  uint8_t router_capacity:1;
+  uint8_t device_depth:4;
+  uint8_t end_device_capacity:1;
+  uint8_t nwk_extended_panid[8];
+  //uint8_t tx_offset[3];//not used
+  uint8_t nwk_update_id;
+} mac_beacon_payload_handle;
+
+typedef struct __neighbour_table_handle {
+  uint8_t extended_addr[8];//unique IEEE addr
+  uint16_t nwk_addr;
+  uint8_t device_type:2;
+  uint8_t rx_on_when_idle:1;
+  uint8_t relationship:3;
+  uint8_t transmit_failure;
+  uint8_t lqi;
+  uint8_t outgoing_cost;
+  uint8_t age;
+} neighbour_table_handle;
+
+typedef struct __network_descriptor_handle {
+  uint8_t extended_panid[8];
+  uint8_t logical_channel;
+  uint8_t stack_profile:4;
+  uint8_t zigbee_version:4;
+  uint8_t beacon_order:4;
+  uint8_t superframe_order:4;
+  uint8_t permit_joining:1;
+  uint8_t router_capacity:1;
+  uint8_t end_device_capacity:1;
+} network_descriptor_handle;
+
+
 /* Currently, size of MAC_PIB_attributes = 24 */
-struct PIB_attributes {
+struct MAC_PIB_attributes_handle {
   uint8_t macAckWaitDuration;//0x40 int, the max number of symbols wait for an ack frame folling a transimited data frame
   
   uint8_t macAssociatedPANCoord:1;//0x56 bool, indicate if device is associated to the pan through pan coord
@@ -63,9 +122,9 @@ struct PIB_attributes {
   uint8_t macBattLifeExtPeriods:5;//0x44 int, not used
   
   //uint8_t macAutoRequest:1;//0x42 bool, whether device auto sends a data request command if its addr is in beacon, not used
-  //uint8_t *macBeaconPayload;//0x45 array
-  //uint8_t macBeaconPayloadLength;//0x46 int
-  //uint8_t macBeaconOrder;//0x47 int
+  mac_beacon_payload_handle macBeaconPayload;//0x45 array
+  uint8_t macBeaconPayloadLength;//0x46 int
+  uint8_t macBeaconOrder;//0x47 int
   //uint16_t macBeaconTxTime;//0x48 int
   //uint8_t macBSN;//0x49 seq num added to the transmitted beacon frame
   //uint8_t macMaxFrameTotalWaitTime; not used in non-beacon net
@@ -101,9 +160,9 @@ struct PIB_attributes {
   //uint8_t macSuperframeOrder;//not used
   uint8_t macSyncSymbolOffset;
   uint16_t macTransactionPersistenceTime;//the max time a transaction is stored by a coord
-} ;
+};
 
-extern struct PIB_attributes MAC_PIB_attributes;
+extern struct MAC_PIB_attributes_handle MAC_PIB_attributes;
 extern QueueHandle_t mac_confirm_fifo;
 
 #define mlme_set_request(perp_name, value) MAC_PIB_attributes.perp_name = value
@@ -112,11 +171,9 @@ extern QueueHandle_t mac_confirm_fifo;
 
 void mac_layer_init();
 
-void mlme_scan_request(uint8_t scan_type=0, uint8_t scan_channels=0, uint8_t scan_duration=0, 
-    uint8_t channel_i_page=0);
+void mlme_scan_request(uint8_t scan_type, uint32_t scan_channels, uint8_t scan_duration, uint8_t channel_i_page);
 
-void mlme_scan_confirm(uint8_t status=0, uint8_t scan_type=0, uint8_t channel_page=0, uint32_t unscaned_channels=0,
-  uint16_t result_list_size=0, uint8_t *energy_detect_list=0, uint8_t *pan_descript_list=0);
+void mlme_scan_confirm(uint8_t status);
 
 void mlme_start_request(uint16_t macPANId = 0, uint8_t logicalChannel = 0, uint8_t PANCoordinator = 0,
 	uint8_t macBattLifeExt = 0);
@@ -124,4 +181,19 @@ void mlme_start_request(uint16_t macPANId = 0, uint8_t logicalChannel = 0, uint8
 void mlme_start_confirm(uint8_t status);
 
 void mac_layer_event_process(void * params);
+
+void mcps_data_request(uint8_t src_addr_mode, uint8_t dst_addr_mode, uint16_t dst_pan_id, uint16_t dst_addr,
+  uint8_t msdu_length, uint8_t *msdu, uint8_t msdu_handle, uint8_t tx_options);
+
+void mcps_data_confirm(uint8_t msdu_handle, uint8_t status, uint32_t time_stamp);
+
+void mcps_data_indication(uint8_t src_addr_mode, uint16_t src_pan_id, uint16_t src_addr, uint8_t dst_addr_mode,
+  uint16_t dst_pan_id, uint16_t dst_addr, uint8_t msdu_length, uint8_t *msdu, uint8_t dsn, uint32_t time_stamp);
+
+void mcps_beacon_notify_indication(uint8_t bsn, uint8_t sdu_length, uint8_t *sdu);
+
+void mcps_command_response(mpdu_frame_handle * mpdu_frame, uint8_t payload_size);
+
+void mcps_handle_beacon_request();
+
 #endif

@@ -1,6 +1,7 @@
 #include "nz_phy_layer.h"
 #include "NRF24Zigbee.h"
 #include <FreeRTOS_AVR.h>
+#include "nz_common.h"
 
 static rx_node_handle rx_fifo_mem[MAX_FIFO_SIZE];/* This consumes 528 bytes */
 static rx_fifo_handle fifo_instance;
@@ -12,15 +13,20 @@ static uint8_t phy_layer_src_addr[2];
 static SemaphoreHandle_t rf_chip_use;
 static SemaphoreHandle_t phy_rx_fifo_sem;
 
-bool phy_layer_init(uint8_t *src_addr)
+//bool phy_layer_init(uint8_t *src_addr)
+bool phy_layer_init(uint16_t src_addr_u16)
 {
+  uint8_t src_addr[2];
   uint8_t mac_addr[5] = {PUBLIC_MAC_ADDR_0, PUBLIC_MAC_ADDR_1, PUBLIC_MAC_ADDR_2, 'z', 'z'};
   nrf_gpio_init(CE_PIN, CSN_PIN); //Set ce pin and csn pin
   SYS_RAM_TRACE();
-  //nrf_set_tx_addr((uint8_t *)"mac01");
+
+  *(uint16_t *)src_addr = src_addr_u16;
+
   SRC_ADDR_COPY(phy_layer_src_addr, src_addr);
   mac_addr[3] = src_addr[0];
   mac_addr[4] = src_addr[1];
+
   nrf_set_rx_addr((uint8_t *)mac_addr);
   nrf_set_broadcast_addr(BROADCAST_ADDR_BYTE0);
   phy_layer_set_src_addr(phy_layer_src_addr);
@@ -81,7 +87,7 @@ void phy_layer_reset_node(rx_node_handle *node)
 
 bool phy_layer_send_slice_packet(phy_packet_handle * packet, uint32_t max_retry = SOFTWARE_RETRY_RATIO)
 {
-  nrf_reliable_send((uint8_t *)packet, 32, max_retry);
+  return nrf_reliable_send((uint8_t *)packet, 32, max_retry);
 }
 
 void phy_layer_test_and_copy(phy_packet_handle *packet, rx_node_handle *phy_rx_node)
@@ -98,7 +104,7 @@ void phy_layer_listener(void)
   phy_packet_handle * packet = (phy_packet_handle *)raw_data;
   rx_node_handle * phy_rx_node = NULL;
   uint8_t last_slice_index = 0;
-  uint16_t last_src_addr = 0;
+  static uint16_t last_src_addr = 0;
   uint8_t last_packet_index = 0;
 
 
@@ -133,7 +139,7 @@ void phy_layer_listener(void)
         goto exit;
     }
 
-    if (packet->slice_index == last_slice_index && packet->src_addr == last_src_addr
+    if (packet->slice_index == last_slice_index && *(uint16_t *)packet->src_addr == last_src_addr
           && packet->packet_index == last_packet_index) {
       pr_err("Repeat packs\n");
       goto exit; /* We omit this repeat packet */
@@ -208,7 +214,6 @@ void phy_layer_listener(void)
             uint8_t packet_index = packet->packet_index;
 
             phy_layer_test_and_copy(packet, phy_rx_node);
-
             phy_rx_node->node_status = NODE_VALID;
             phy_rx_node->length = (packet->slice_size-1) * MAX_PACKET_DATA_SIZE + packet->length;
           }
@@ -233,7 +238,7 @@ void phy_layer_listener(void)
 
     ENABLE_LOG_OUTPUT();
     last_slice_index = packet->slice_index;
-    last_src_addr = packet->src_addr;
+    last_src_addr = *(uint16_t *)packet->src_addr;
     last_packet_index = packet->packet_index;
 
     return ;
@@ -273,7 +278,7 @@ uint16_t phy_layer_fifo_top_node_size(void)
  * @Param max_length: data max length to get,default to 128
  * @Return : data amount get at last 
  */
-uint16_t phy_layer_fifo_pop_data(uint8_t *data, uint16_t max_length = 128)
+uint16_t phy_layer_fifo_pop_data(uint8_t *data, uint16_t max_length)
 {
   rx_node_handle * node;
 
@@ -309,16 +314,19 @@ void phy_layer_set_dst_addr(uint8_t *addr)
 }
 
 
-bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t length)
+bool phy_layer_send_raw_data(uint16_t dst_mac_addr_u16, uint8_t *raw_data, uint32_t length)
 {
   uint8_t compare_flag = 0;
   uint8_t i;
+  uint8_t dst_mac_addr[2];
+  uint8_t send_result = 1;
   static uint8_t packet_index = 0;
   uint8_t packet_mem[32] = {0};
   phy_packet_handle * packet = (phy_packet_handle *)packet_mem;
   uint8_t packet_send_status = 0x00;
   uint8_t *data_offset = raw_data; /* Offset ptr for raw_data*/
 
+  *(uint16_t *)dst_mac_addr = dst_mac_addr_u16;
   SYS_RAM_TRACE();
   packet->type = MESSAGE_PACKET;
   packet->packet_index = packet_index;
@@ -351,30 +359,23 @@ bool phy_layer_send_raw_data(uint8_t *dst_mac_addr, uint8_t *raw_data, uint32_t 
     data_offset += packet->length;
     //phy_packet_trace(packet);
     xSemaphoreTake(rf_chip_use, portMAX_DELAY);
-    phy_layer_send_slice_packet(packet, SOFTWARE_RETRY_RATIO);
+    send_result &= (uint8_t)phy_layer_send_slice_packet(packet, SOFTWARE_RETRY_RATIO);
     xSemaphoreGive(rf_chip_use);
     //phy_packet_trace(packet ,0);
   }
 
   SYS_RAM_TRACE();
   packet_index = (packet_index + 1) % MAX_PACKET_INDEX;
+
+  return send_result;
 }
 
-void phy_layer_rx_service(void *params)
+void phy_layer_event_process(void *params)
 {
-  uint8_t data_length;
-  uint8_t data[128];
-
   while (1) {
     phy_layer_listener();
-
-    if ((data_length = phy_layer_fifo_top_node_size()) > 0) {
-      data_length = phy_layer_fifo_pop_data(data);
-      debug_printf("read_size=%u crc_raw=0x%02X crc_calc=0x%02X \n\n", data_length, data[data_length-1], crc_calculate(data, data_length-1));
-    /* TODO: Indication */
-
-    }
-    
+    //last_wake_time = xTaskGetTickCount();
+    //vTaskDelayUntil(&last_wake_time, 357);
     vTaskDelay(1);
   }
 }
