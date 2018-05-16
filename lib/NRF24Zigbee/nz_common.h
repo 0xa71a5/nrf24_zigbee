@@ -10,8 +10,8 @@ typedef struct __confirm_event
   uint8_t *confirm_ptr;
 } confirm_event;
 
-bool signal_wait(uint8_t * signal, uint16_t delay_time = 100);
-bool wait_event(uint8_t * event_ptr, uint16_t delay_time = 100);
+bool signal_wait(volatile uint8_t * signal, uint16_t delay_time = 100);
+bool wait_event(volatile uint8_t * event_ptr, uint16_t delay_time = 100);
 
 /* Definition of status */
 #define SUCCESS 				0

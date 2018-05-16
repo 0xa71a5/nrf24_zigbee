@@ -1,5 +1,6 @@
 #include "nz_nwk_layer.h"
 #include "nz_common.h"
+#include "event_fifo.h"
 
 QueueHandle_t nwk_confirm_fifo;
 QueueHandle_t nwk_indication_fifo;
@@ -26,10 +27,10 @@ void nwk_layer_init()
   nwk_indication_fifo = xQueueCreate(NWK_INDICATION_FIFO_SIZE, sizeof(nwk_indication));
 
   event_fifo_init(&nwk_pan_descriptors_fifo, event_pan_des_ptr_area,
-  nwk_pan_descriptors_mem, BEACON_INDICATION_FIFO_SIZE, sizeof(pan_descriptor_64_handle));
+  (uint8_t *)nwk_pan_descriptors_mem, BEACON_INDICATION_FIFO_SIZE, sizeof(pan_descriptor_64_handle));
 
   event_fifo_init(&nwk_descriptors_fifo, event_nwk_desc_ptr_area,
-  nwk_descriptors_mem, NWK_DESCRIPTOR_FIFO_SIZE, sizeof(network_descriptor_handle));
+  (uint8_t *)nwk_descriptors_mem, NWK_DESCRIPTOR_FIFO_SIZE, sizeof(network_descriptor_handle));
 }
 
 void nlme_send_confirm_event(uint8_t confirm_type, void *ptr)
@@ -283,11 +284,13 @@ void nlme_network_discovery_request(uint32_t scan_channels, uint8_t scan_duratio
 
   // Do a active scan for sniffering any pan coord
   mlme_scan_request(active_scan, scan_channels, scan_duration, 0);
-/*
+
   // Wait for scan request beacon all sent
-  if (signal_wait(&scan_confirm_event_flag, 1000))
+  if (signal_wait(&scan_confirm_event_flag, 1000)) {
     debug_printf("Active scan confirm status=%u,all beacon requests sent out\n", scan_confirm_ptr->status);
+  }
   else {
+    debug_printf("Active scan timeout\n");
     goto fail_exit;
   }
 
@@ -295,8 +298,11 @@ void nlme_network_discovery_request(uint32_t scan_channels, uint8_t scan_duratio
   // Sleep 1000ms to receive beacons
   vTaskDelay(1000);
   mlme_set_request(macPANId, restore_pan_id);
+
+  
   nlme_network_discovery_confirm(scan_confirm_ptr->status);
 
+  /*
   if (nwk_pan_descriptors_fifo.cur_size != 0) {
     debug_printf("Got %u pan_descriptors!\n", nwk_pan_descriptors_fifo.cur_size);
     debug_printf("###### PAN DESCRIPTOR PRINT ######\n");
@@ -313,18 +319,18 @@ void nlme_network_discovery_request(uint32_t scan_channels, uint8_t scan_duratio
 
     }
     debug_printf("##################################\n\n");
-
   }
   else {
     debug_printf("Dont got any beacons!\n");
   }
+  */
 
   return;
 
   fail_exit:
   nlme_network_discovery_confirm(STARTUP_FAILURE);
   return;
-  */
+
 }
 
 

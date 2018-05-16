@@ -16,6 +16,7 @@ extern QueueHandle_t apl_confirm_fifo;
 extern QueueHandle_t apl_indication_fifo;
 extern volatile uint8_t formation_confirm_event_flag;
 extern volatile uint8_t apl_data_confirm_event_flag;
+extern volatile uint8_t apl_nwk_discovery_event_flag;
 
 typedef struct __apl_indication_handle
 {

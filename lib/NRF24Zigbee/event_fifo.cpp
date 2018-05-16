@@ -32,7 +32,7 @@ inline uint8_t event_fifo_is_mem_used(event_fifo_handle * p_fifo, uint8_t mem_in
     return (p_fifo->mem_used >> mem_index) & 0x1;
 }
 
-void event_fifo_init(event_fifo_handle * p_fifo,  event_node_handle *mem_base_addr, void *real_element_mem, uint8_t size, uint8_t element_size)
+void event_fifo_init(event_fifo_handle * p_fifo,  event_node_handle *mem_base_addr, uint8_t *real_element_mem, uint8_t size, uint8_t element_size)
 {
     p_fifo->elements = mem_base_addr;
     p_fifo->real_element_mem = real_element_mem;
@@ -204,7 +204,7 @@ void event_fifo_traverse(event_fifo_handle * p_fifo)
     printf("\n");
 }
 
-#ifdef EVENT_FIFO_TEST
+#if 0
 
 #define CONFIRM_FIFO_SIZE 4
 #define INDICATION_FIFO_SIZE 3

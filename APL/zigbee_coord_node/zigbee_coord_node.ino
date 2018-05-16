@@ -16,32 +16,6 @@ TaskHandle_t task_tx_server_handle;
 
 
 
-static void send_packet_test(void *params)
-{
-  uint8_t seq_num = 0;
-  debug_printf("Enter send_packet_test\n");
-  while (1) {
-    #define test_size 127
-    uint8_t data[test_size];
-    data[0] = seq_num ++;
-    for (uint8_t i = 1; i < test_size-1; i++)
-      data[i] = random(256);
-    data[test_size - 1] = crc_calculate(data, test_size-1);
-    debug_printf("===> Send to 0 0xff,crc = 0x%02X\n", data[test_size-1]);
-    uint8_t dst[2] = {'0', 0xff};
-    uint32_t record_time = micros();
-    
-    phy_layer_send_raw_data(dst, data, test_size);
-
-    record_time = micros() - record_time;
-    debug_printf("Take %u s to send\n\n", record_time);
-    
-    vTaskDelay(500);
-  }
-}
-
-
-
 void apl_layer_test(void *params)
 {
   uint32_t record_time;
@@ -62,7 +36,6 @@ void apl_layer_test(void *params)
   else {
     debug_printf("###formation failed!###\n\n");
   }
-
 
   while (1) {
     if (xQueueReceive(apl_indication_fifo, &indication, 1000)) {

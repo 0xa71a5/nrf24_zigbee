@@ -173,8 +173,7 @@ void mac_layer_init();
 
 void mlme_scan_request(uint8_t scan_type, uint32_t scan_channels, uint8_t scan_duration, uint8_t channel_i_page);
 
-void mlme_scan_confirm(uint8_t status=0, uint8_t scan_type=0, uint8_t channel_page=0, uint32_t unscaned_channels=0,
-  uint16_t result_list_size=0, uint8_t *energy_detect_list=0, uint8_t *pan_descript_list=0);
+void mlme_scan_confirm(uint8_t status);
 
 void mlme_start_request(uint16_t macPANId = 0, uint8_t logicalChannel = 0, uint8_t PANCoordinator = 0,
 	uint8_t macBattLifeExt = 0);

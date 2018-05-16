@@ -19,7 +19,7 @@ void mlme_send_confirm_event(uint8_t confirm_type, void *ptr)
 
 	event.confirm_type = confirm_type;
   event.confirm_ptr = (uint8_t *)ptr;
-  xQueueSendToBack(nwk_confirm_fifo, &event, 500 /portTICK_PERIOD_MS);
+  xQueueSendToBack(nwk_confirm_fifo, &event, 500);
 }
 
 uint16_t restore_pan_id = 0xffff;
@@ -35,9 +35,8 @@ void mlme_scan_request(uint8_t scan_type, uint32_t scan_channels, uint8_t scan_d
     debug_printf("mlme_set_request active_scan\n");
     restore_pan_id = mlme_get_request(macPANId);
     // Set local panid to 0xffff
-    MAC_PIB_attributes.macPANId = 1;
-//    mlme_set_request(macPANId, 0x1);
-/*
+    mlme_set_request(macPANId, 0xffff);
+
 
     // Send out active scan request beacon
     cmd_frame.frame_control.frame_type = mac_frame_type_command;
@@ -51,22 +50,21 @@ void mlme_scan_request(uint8_t scan_type, uint32_t scan_channels, uint8_t scan_d
 
     debug_printf("call phy_layer_send_raw_data, dst_addr=0x%04X\n", DEFAULT_BROADCAST_ADDR);
     phy_layer_send_raw_data(DEFAULT_BROADCAST_ADDR, (uint8_t *)&cmd_frame, to_send_size);
-  */
+
   }
 
-  //mlme_scan_confirm(scan_type, scan_channels, channel_i_page);
+  mlme_scan_confirm(SUCCESS);
 }
 
-void mlme_scan_confirm(uint8_t status=0, uint8_t scan_type=0, uint8_t channel_page=0, uint32_t unscaned_channels=0,
-  uint16_t result_list_size=0, uint8_t *energy_detect_list=0, uint8_t *pan_descript_list=0)
+void mlme_scan_confirm(uint8_t status)
 {
   static mlme_scan_confirm_handle scan_confirm;/* Set this to static ,cause we dont use malloc */
 
   scan_confirm.status = status;
-  scan_confirm.scan_type = scan_type;
-  scan_confirm.channel_page = channel_page;
-  scan_confirm.result_list_size = result_list_size;
-  scan_confirm.unscaned_channels = unscaned_channels;
+  //scan_confirm.scan_type = scan_type;
+  //scan_confirm.channel_page = channel_page;
+  //scan_confirm.result_list_size = result_list_size;
+  //scan_confirm.unscaned_channels = unscaned_channels;
   //scan_confirm.energy_detect_list = energy_detect_list;
   //scan_confirm.pan_descript_list = pan_descript_list;
   debug_printf("mlme_scan_confirm\n");
@@ -74,8 +72,8 @@ void mlme_scan_confirm(uint8_t status=0, uint8_t scan_type=0, uint8_t channel_pa
 }
 
 //MLME-START
-void mlme_start_request(uint16_t macPANId = 0, uint8_t logicalChannel = 0, uint8_t PANCoordinator = 0,
-	uint8_t macBattLifeExt = 0)
+void mlme_start_request(uint16_t macPANId, uint8_t logicalChannel, uint8_t PANCoordinator,
+	uint8_t macBattLifeExt)
 {
   if (mlme_get_request(macShortAddress) == 0xffff) {
     debug_printf("mlme_start_request: return of NO_SHORT_ADDRESS\n");

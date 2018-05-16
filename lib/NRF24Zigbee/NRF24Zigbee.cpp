@@ -315,7 +315,7 @@ void nrf_retreat()
  * Reliable send shall consider complex wireless environment
  * and retreat when neccessary.
 */
-bool nrf_reliable_send(uint8_t *data, uint32_t length = 32, uint32_t max_fail_time = 100)
+bool nrf_reliable_send(uint8_t *data, uint32_t length, uint32_t max_fail_time)
 {
   uint8_t tx_status = 0x00;
   uint8_t failed_times = 0;
@@ -329,7 +329,7 @@ bool nrf_reliable_send(uint8_t *data, uint32_t length = 32, uint32_t max_fail_ti
   return tx_status == TX_REACH_DST;
 }
 
-void nrf_broad(uint8_t *data, uint32_t length = 32)
+void nrf_broad(uint8_t *data, uint32_t length)
 {
   nrf_retreat();
   nrf_send(data);

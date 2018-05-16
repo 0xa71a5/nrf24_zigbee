@@ -6,7 +6,7 @@ QueueHandle_t apl_indication_fifo;
 
 volatile uint8_t formation_confirm_event_flag = 0;
 volatile uint8_t apl_data_confirm_event_flag = 0;
-
+volatile uint8_t apl_nwk_discovery_event_flag = 0;
 
 void apl_layer_init()
 {
@@ -40,9 +40,14 @@ void apl_layer_event_process(void *params)
         break;
 
         case confirm_type_nwk_discovery:
+          debug_printf("This is a apl_nwk_discovery_ptr\n");
+          apl_nwk_discovery_event_flag = 1;
           apl_nwk_discovery_ptr = (nlme_nwk_discovery_confirm_handle *)event.confirm_ptr;
         break;
 
+        default:
+          debug_printf("Unknown type of event confirm\n");
+        break;
       }
     }
 

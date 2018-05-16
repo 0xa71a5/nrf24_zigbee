@@ -26,7 +26,7 @@ typedef struct __event_node_handle_ptr
 typedef struct __event_fifo_handle
 {
     event_node_handle *elements;/* Store elements free index ptr */
-    void  *real_element_mem;/* Store real elements mem*/
+    uint8_t  *real_element_mem;/* Store real elements mem*/
     uint8_t front;
     uint8_t rear;
     uint8_t size;
@@ -48,7 +48,7 @@ enum event_type {
 inline void event_fifo_mark_mem_used(event_fifo_handle * p_fifo, uint8_t mem_index);
 inline void event_fifo_mark_mem_released(event_fifo_handle * p_fifo, uint8_t mem_index);
 inline uint8_t event_fifo_is_mem_used(event_fifo_handle * p_fifo, uint8_t mem_index);
-void event_fifo_init(event_fifo_handle * p_fifo,  event_node_handle *mem_base_addr, void *real_element_mem, uint8_t size, uint8_t element_size);
+void event_fifo_init(event_fifo_handle * p_fifo,  event_node_handle *mem_base_addr, uint8_t *real_element_mem, uint8_t size, uint8_t element_size);
 inline void event_fifo_copy_node(event_node_handle *dst, event_node_handle *src);
 inline bool event_fifo_is_full(event_fifo_handle * p_fifo);
 inline bool event_fifo_is_empty(event_fifo_handle * p_fifo);

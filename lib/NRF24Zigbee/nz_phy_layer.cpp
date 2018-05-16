@@ -104,7 +104,7 @@ void phy_layer_listener(void)
   phy_packet_handle * packet = (phy_packet_handle *)raw_data;
   rx_node_handle * phy_rx_node = NULL;
   uint8_t last_slice_index = 0;
-  uint16_t last_src_addr = 0;
+  static uint16_t last_src_addr = 0;
   uint8_t last_packet_index = 0;
 
 
@@ -139,7 +139,7 @@ void phy_layer_listener(void)
         goto exit;
     }
 
-    if (packet->slice_index == last_slice_index && packet->src_addr == last_src_addr
+    if (packet->slice_index == last_slice_index && *(uint16_t *)packet->src_addr == last_src_addr
           && packet->packet_index == last_packet_index) {
       pr_err("Repeat packs\n");
       goto exit; /* We omit this repeat packet */
@@ -238,7 +238,7 @@ void phy_layer_listener(void)
 
     ENABLE_LOG_OUTPUT();
     last_slice_index = packet->slice_index;
-    last_src_addr = packet->src_addr;
+    last_src_addr = *(uint16_t *)packet->src_addr;
     last_packet_index = packet->packet_index;
 
     return ;
@@ -278,7 +278,7 @@ uint16_t phy_layer_fifo_top_node_size(void)
  * @Param max_length: data max length to get,default to 128
  * @Return : data amount get at last 
  */
-uint16_t phy_layer_fifo_pop_data(uint8_t *data, uint16_t max_length = 128)
+uint16_t phy_layer_fifo_pop_data(uint8_t *data, uint16_t max_length)
 {
   rx_node_handle * node;
 
