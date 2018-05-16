@@ -11,6 +11,7 @@ typedef struct __confirm_event
 } confirm_event;
 
 bool signal_wait(uint8_t * signal, uint16_t delay_time = 100);
+bool wait_event(uint8_t * event_ptr, uint16_t delay_time = 100);
 
 /* Definition of status */
 #define SUCCESS 				0
@@ -44,6 +45,7 @@ enum confirm_types {
   	confirm_type_set,
   	confirm_type_start,
   	confirm_type_formation,
+    confirm_type_nwk_discovery,
   	confirm_type_data_confirm,
 };
 
@@ -165,5 +167,11 @@ enum cmd_frame_identifier {
 #define NPDU_FRAME_OVERHEAD_SIZE sizeof(npdu_frame_handle)
 #define NPDU_PAYLOAD_MAX_SIZE (NPDU_MAX_SIZE - NPDU_FRAME_OVERHEAD_SIZE)
 #define APDU_MAX_SIZE NPDU_PAYLOAD_MAX_SIZE
+
+#define ZIGBEE_COORD 0
+#define ZIGBEE_ROUTE 1
+#define ZIGBEE_DEVICE 2
+
+extern volatile uint8_t node_identify;
 
 #endif

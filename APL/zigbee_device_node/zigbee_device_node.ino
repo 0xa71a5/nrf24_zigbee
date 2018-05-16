@@ -37,12 +37,15 @@ static void send_packet_test(void *params)
   }
 }
 
+extern volatile nlme_nwk_discovery_confirm_handle *apl_nwk_discovery_ptr;
+
 void apl_layer_test(void *params)
 {
   uint32_t record_time;
   static apl_indication indication;
   #define apl_data_length 45
   static uint8_t apl_data[apl_data_length];
+  static network_descriptor_handle nwk_descriptor;
 
   uint16_t dst_addr = 0x0100;
   uint8_t handle = random(255);
@@ -65,6 +68,18 @@ void apl_layer_test(void *params)
       Serial.read();
       debug_printf("\nCall nlme_network_discovery_request\n");
       nlme_network_discovery_request(0, 100);
+      if (wait_event((uint8_t *)apl_nwk_discovery_ptr, 2000)) {
+        debug_printf("apl:Got nwk discovery confirm, status=%u\n", apl_nwk_discovery_ptr->status);
+      }
+      else {
+        debug_printf("apl: wait nwk discovery timeout\n");
+      }
+
+      debug_printf("Got nwk_descriptor size %u\n", nwk_descriptors_fifo.cur_size);
+      while(event_fifo_out(&nwk_descriptors_fifo, &nwk_descriptor)) {
+          debug_printf("NWK descriptor: perimit_join=%u router_capacity=%u ext_panid=", nwk_descriptor.permit_joining, nwk_descriptor.router_capacity);
+      }
+
     }
 
   }

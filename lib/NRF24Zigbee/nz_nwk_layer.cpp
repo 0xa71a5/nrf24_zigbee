@@ -41,6 +41,7 @@ void nlme_send_confirm_event(uint8_t confirm_type, void *ptr)
   xQueueSendToBack(apl_confirm_fifo, &event, pdMS_TO_TICKS(1000));
 }
 
+
 /* Format a new network request */
 void nlme_network_formation_request(uint8_t scan_channels, uint8_t scan_duration, uint8_t battery_life_ext)
 {
@@ -123,9 +124,9 @@ void nlme_network_formation_confirm(uint8_t status)
   debug_printf("nlme_network_formation_confirm %u\n", status);
 }
 
-static mlme_scan_confirm_handle  *scan_confirm_ptr;
-static mlme_start_confirm_handle *start_confirm_ptr;
-static mcps_data_confirm_handle  *data_confirm_ptr;
+static volatile mlme_scan_confirm_handle  *scan_confirm_ptr = NULL;
+static volatile mlme_start_confirm_handle *start_confirm_ptr = NULL;
+static volatile mcps_data_confirm_handle  *data_confirm_ptr = NULL;
 
 void nwk_layer_event_process(void * params)
 {
@@ -255,21 +256,37 @@ void nlde_data_confirm(uint8_t status, uint8_t npdu_handle, uint32_t tx_time)
 
 extern volatile uint16_t restore_pan_id;
 
+void extended_panid_print(uint8_t *panid)
+{
+  //debug_printf("ex_panid=");
+  for (uint8_t i = 0; i < 8; i ++) {
+    if (i != 7) {
+      debug_printf("%u.", panid[i]);
+    }
+    else {
+      debug_printf("%u\n", panid[i]);
+    }
+  }
+}
+
+
 void nlme_network_discovery_request(uint32_t scan_channels, uint8_t scan_duration)
 {
   uint32_t start_time;
   pan_descriptor_64_handle pan_descriptor_64;
   pan_descriptor_16_handle *pan_descriptors_16_ptr;
-  
+  uint8_t nwk_count = 0;
+ 
+
   //We have to use the 64bit one,
   //cause we dont know true size of it before we read it
 
   // Do a active scan for sniffering any pan coord
   mlme_scan_request(active_scan, scan_channels, scan_duration, 0);
-
+/*
   // Wait for scan request beacon all sent
   if (signal_wait(&scan_confirm_event_flag, 1000))
-    debug_printf("Active scan done ,all beacon requests sent out\n");
+    debug_printf("Active scan confirm status=%u,all beacon requests sent out\n", scan_confirm_ptr->status);
   else {
     goto fail_exit;
   }
@@ -278,6 +295,7 @@ void nlme_network_discovery_request(uint32_t scan_channels, uint8_t scan_duratio
   // Sleep 1000ms to receive beacons
   vTaskDelay(1000);
   mlme_set_request(macPANId, restore_pan_id);
+  nlme_network_discovery_confirm(scan_confirm_ptr->status);
 
   if (nwk_pan_descriptors_fifo.cur_size != 0) {
     debug_printf("Got %u pan_descriptors!\n", nwk_pan_descriptors_fifo.cur_size);
@@ -292,25 +310,30 @@ void nlme_network_discovery_request(uint32_t scan_channels, uint8_t scan_duratio
         debug_printf("PANid=0x%04X CoordAddr=0x%04X\n", 
           pan_descriptor_64.coord_pan_id, pan_descriptor_64.coord_addr);
       }
+
     }
     debug_printf("##################################\n\n");
-
-
 
   }
   else {
     debug_printf("Dont got any beacons!\n");
   }
 
-  //return;
+  return;
 
   fail_exit:
-  //nlme_network_discovery_confirm();
+  nlme_network_discovery_confirm(STARTUP_FAILURE);
   return;
+  */
 }
 
 
-void nlme_network_discovery_confirm(uint8_t status, uint8_t nwk_count, network_descriptor_handle *nwk_descriptor)
+void nlme_network_discovery_confirm(uint8_t status)
 {
+  static nlme_nwk_discovery_confirm_handle confirm;
 
+  confirm.status = status;
+  nlme_send_confirm_event(confirm_type_nwk_discovery, &confirm);
+  debug_printf("nlme_nwk_discovery_confirm %u\n", status);
 }
+

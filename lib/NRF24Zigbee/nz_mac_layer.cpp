@@ -24,8 +24,7 @@ void mlme_send_confirm_event(uint8_t confirm_type, void *ptr)
 
 uint16_t restore_pan_id = 0xffff;
 
-void mlme_scan_request(uint8_t scan_type=0, uint32_t scan_channels=0, uint8_t scan_duration=0, 
-    uint8_t channel_i_page=0)
+void mlme_scan_request(uint8_t scan_type, uint32_t scan_channels, uint8_t scan_duration, uint8_t channel_i_page)
 {  
   mpdu_frame_handle cmd_frame;
   bool send_result;
@@ -35,11 +34,12 @@ void mlme_scan_request(uint8_t scan_type=0, uint32_t scan_channels=0, uint8_t sc
   if (scan_type == active_scan) {
     debug_printf("mlme_set_request active_scan\n");
     restore_pan_id = mlme_get_request(macPANId);
+    // Set local panid to 0xffff
+    MAC_PIB_attributes.macPANId = 1;
+//    mlme_set_request(macPANId, 0x1);
+/*
 
-    /* Set local panid to 0xffff */
-    mlme_set_request(macPANId, 0xffff);
-
-    /* Send out active scan request beacon */
+    // Send out active scan request beacon
     cmd_frame.frame_control.frame_type = mac_frame_type_command;
     cmd_frame.frame_control.dst_addr_mode = mac_addr_16bits;
     // TODO: src addr shall be comprised
@@ -51,9 +51,10 @@ void mlme_scan_request(uint8_t scan_type=0, uint32_t scan_channels=0, uint8_t sc
 
     debug_printf("call phy_layer_send_raw_data, dst_addr=0x%04X\n", DEFAULT_BROADCAST_ADDR);
     phy_layer_send_raw_data(DEFAULT_BROADCAST_ADDR, (uint8_t *)&cmd_frame, to_send_size);
+  */
   }
 
-  mlme_scan_confirm(scan_type, scan_channels, channel_i_page);
+  //mlme_scan_confirm(scan_type, scan_channels, channel_i_page);
 }
 
 void mlme_scan_confirm(uint8_t status=0, uint8_t scan_type=0, uint8_t channel_page=0, uint32_t unscaned_channels=0,

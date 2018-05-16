@@ -15,7 +15,8 @@ void apl_layer_init()
   /* Do a default setting of PIB attributes */
 }
 
-nlme_formation_confirm_handle *apl_data_confirm_ptr;
+volatile nlme_formation_confirm_handle *apl_data_confirm_ptr = NULL;
+volatile nlme_nwk_discovery_confirm_handle *apl_nwk_discovery_ptr = NULL;
 
 void apl_layer_event_process(void *params)
 {
@@ -36,6 +37,10 @@ void apl_layer_event_process(void *params)
         case confirm_type_data_confirm:
           apl_data_confirm_event_flag = 1;
           apl_data_confirm_ptr = (nlme_formation_confirm_handle *)event.confirm_ptr;
+        break;
+
+        case confirm_type_nwk_discovery:
+          apl_nwk_discovery_ptr = (nlme_nwk_discovery_confirm_handle *)event.confirm_ptr;
         break;
 
       }

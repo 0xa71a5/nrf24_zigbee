@@ -59,7 +59,7 @@ nwk discovery首先进行activescan，然后会在一定时间内持续接受bea
 	  uint8_t end_device_capacity:1;
 	} network_descriptor_handle;
 
-
+在Zigbee协议的nwk layer定义中，nlme_discovery_confirm返回的参数是status，network_count,network_descirptors，这里为了编程上方便同时节省内存空间，将nwk_count和nwk_descirptors整合到全局共享的nwk_descriptors_fifo中，这个带互斥锁机制的fifo由nwk layer和apl layer共享，所以nlme_discovery_confirm只需要返回scan的status即可。
 
 
 
