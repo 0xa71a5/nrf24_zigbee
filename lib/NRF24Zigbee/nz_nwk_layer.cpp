@@ -448,6 +448,6 @@ void nlme_join_indication(uint16_t nwk_addr, uint8_t *extended_addr, uint8_t cap
   indication.capability = capability;
   indication.rejoin_network = rejoin_network;
   debug_printf("nlme_join_indication nwk_addr=0x%04X\n", nwk_addr);
-  //event_fifo_in(&nwk_join_ind_fifo, (uint8_t *)&indication);
+  event_fifo_in(&nwk_join_ind_fifo, (uint8_t *)&indication);
 }
 

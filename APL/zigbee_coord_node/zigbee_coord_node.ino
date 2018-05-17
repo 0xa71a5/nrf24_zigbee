@@ -106,7 +106,7 @@ void setup()
   mlme_set_request(aExtendedAddress[7], 0x00);
 
 
-  //xTaskCreate(phy_layer_event_process, "rx_sv", 300+50,/*150 bytes stack*/
+  xTaskCreate(phy_layer_event_process, "rx_sv", 300+50,/*150 bytes stack*/
     //NULL, tskIDLE_PRIORITY + 2, &phy_task); //Used: 580 bytes stack
 
   xTaskCreate2(mac_layer_event_process, "mac_sv", mac_task_stack_size,
