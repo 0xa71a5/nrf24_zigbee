@@ -208,6 +208,8 @@ enum cmd_frame_identifier {
 #define ZIGBEE_COORD 0
 #define ZIGBEE_ROUTE 1
 #define ZIGBEE_DEVICE 2
+#define ZIGBEE_ROUTER 1
+#define ZIGBEE_END_DEVICE 2
 
 extern volatile uint8_t node_identify;
 

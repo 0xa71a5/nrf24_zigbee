@@ -31,5 +31,8 @@ typedef struct __apl_indication_handle
 
 void apl_layer_init();
 void apl_layer_event_process(void *params);
+void zigbee_network_init(uint8_t device_role);
+uint8_t apl_data_ready();
+uint8_t apl_send(uint16_t dst_nwk_addr, uint8_t *data_32);
 
 #endif

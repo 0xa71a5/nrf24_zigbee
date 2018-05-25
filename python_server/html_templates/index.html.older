@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IOT Server</title>
+    <meta charset="utf-8">
+</head>
+<script type="text/javascript" src="http://www.w3school.com.cn/jquery/jquery-1.11.1.min.js"></script>
+<script type="text/javascript">  
+    function parseJson(w) {
+        return eval("(" + w + ")");
+    }
+    function getXmlhttp() {  
+        var xmlhttp;  
+        if (window.XMLHttpRequest) { 
+            xmlhttp = new XMLHttpRequest();  
+        } else {
+            xmlhttp = new ActiveXObject("Microsoft.XMLHTTP");  
+        }  
+        return xmlhttp;  
+    }  
+    var xmlhttp = getXmlhttp();  
+    xmlhttp.onreadystatechange = function() {  
+                if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {   
+                    Handle_Command(xmlhttp.responseText)  
+                }  
+            }   
+    function ws_send(toSend)
+    {
+        xmlhttp.open("POST", "api", true);  
+        xmlhttp.send(toSend);  
+    }
+
+    function Handle_Command(command)
+    {
+        var recvStr=command;
+        console.log("recvStr:"+recvStr);
+        var jsonObject=parseJson(recvStr);//将字符串转换成json
+        var Type=jsonObject["Type"];        //获取json的Type字段
+        var Content=jsonObject["Content"];  //获取json的Content字段
+
+        if(Type == "getDhtStatusResult")
+        {
+            $("#status").html(Content["status"]);
+        }
+        else if (Type == "getHumidityResult" )
+        {
+            $("#humidity").html(Content["humidity"]);
+        }
+        else if(Type == "getTemperatureResult" )
+        {
+            $("#temperature").html(Content["temperature"]);
+        }   
+        //下面是空调控制
+        else if(Type == "getAcStatusResult")
+        {
+            $("#acStatus").html(Content["status"]);
+        }
+        else if (Type == "turnOnAcResult" )
+        {
+            if(Content["result"] == "suc")
+                result="空调被打开"
+            else
+                result="空调打开失败"
+
+            $("#turnOnAcResult").html(result);
+        }
+        else if (Type == "turnOffAcResult" )
+        {
+            if(Content["result"] == "suc")
+                result="空调被关闭"
+            else
+                result="空调关闭失败"
+
+            $("#turnOffAcResult").html(Content["result"]);
+        }
+        //下面是电烙铁控制器的代码
+        else if(Type == "getDoorlockStatusResult")
+        {
+            $("#doorlockStatus").html(Content["status"]);
+        }
+        else if(Type == "getDoorlockSwitchStatusResult")
+        {
+            $("#doorlockSwitchStatus").html(Content["status"]);
+        }
+        else if (Type == "turnOnElectricPowerResult" )
+        {
+            if(Content["result"] == "suc")
+                result="允许门锁工作"
+            else
+                result="通信失败"
+            $("#turnOnElectricPowerResult").html(result);
+        }
+        else if (Type == "turnOffElectricPowerResult" )
+        {
+            if(Content["result"] == "suc")
+                result="禁止门锁工作"
+            else
+                result="通信失败"
+            $("#turnOffElectricPowerResult").html(result);
+        }
+        //下面是灯控制器的代码
+        else if(Type == "getLightStatusResult")
+        {
+            $("#lightStatus").html(Content["status"]);
+        }
+        else if(Type == "getLightSwitchStatusResult")
+        {
+            $("#lightSwitchStatus").html(Content["status"]);
+        }
+        else if (Type == "turnOnLightPowerResult" )
+        {
+            if(Content["result"] == "suc")
+                result="灯被打开"
+            else
+                result="通信失败"
+            $("#turnOnLightPowerResult").html(result);
+        }
+        else if (Type == "turnOffLightPowerResult" )
+        {
+            if(Content["result"] == "suc")
+                result="灯被关闭"
+            else
+                result="通信失败"
+            $("#turnOffLightPowerResult").html(result);
+        }
+    }
+
+    function getDhtStatus(){
+        var content = {'deviceId': $("#deviceId").val()};
+        var package = {
+            'Type': 'getDhtStatus',
+            'Content': content
+        }
+        ws_send(JSON.stringify(package));
+    }
+
+    function getTemperature() {
+        var content = {'deviceId': $("#deviceId").val()};
+        var package = {
+            'Type': 'getTemperature',
+            'Content': content
+        }
+        ws_send(JSON.stringify(package));
+    }
+
+    function getHumidity() {
+        var content = {'deviceId': $("#deviceId").val()};
+        var package = {
+            'Type': 'getHumidity',
+            'Content': content
+        }
+        ws_send(JSON.stringify(package));
+    }
+
+    function test()
+    {
+        alert($("#deviceId").val())
+    }
+
+    function getAcStatus(){
+        var content = {'deviceId': '0' };
+        var package = {
+            'Type': 'getAcStatus',
+            'Content': content
+        }
+        ws_send(JSON.stringify(package));
+    }
+
+    function turnOnAc(){
+        var content = {'action': 'none' };
+        var package = {
+            'Type': 'turnOnAc',
+            'Content': content
+        }
+        ws_send(JSON.stringify(package));
+    }
+
+    function turnOffAc(){
+        var content = {'action': 'none' };
+        var package = {
+            'Type': 'turnOffAc',
+            'Content': content
+        }
+        ws_send(JSON.stringify(package));
+    }
+
+    function setAcTemperature(){
+        var content = {'temperature': $("#acTemperature").val() };
+        var package = {
+            'Type': 'setAcTemperature',
+            'Content': content
+        }
+        ws_send(JSON.stringify(package));
+    }
+
+    function getDoorlockStatus()
+    {
+        var content = {'deviceId': '0' };
+        var package = {
+            'Type': 'getDoorlockStatus',
+            'Content': content
+        }
+        ws_send(JSON.stringify(package));
+    }
+
+    function getDoorlockSwitchStatus()
+    {
+        var content = {'deviceId': '0' };
+        var package = {
+            'Type': 'getDoorlockSwitchStatus',
+            'Content': content
+        }
+        ws_send(JSON.stringify(package));  
+    }
+
+    function turnOnElectricPower()
+    {
+        var content = {'deviceId': '0' };
+        var package = {
+            'Type': 'turnOnElectricPower',
+            'Content': content
+        }
+        ws_send(JSON.stringify(package));  
+    }
+
+    function turnOffElectricPower()
+    {
+        var content = {'deviceId': '0' };
+        var package = {
+            'Type': 'turnOffElectricPower',
+            'Content': content
+        }
+        ws_send(JSON.stringify(package));  
+    }
+
+//Light control
+    function getLightStatus()
+    {
+        var content = {'deviceId': '0' };
+        var package = {
+            'Type': 'getLightStatus',
+            'Content': content
+        }
+        ws_send(JSON.stringify(package));
+    }
+
+    function getLightSwitchStatus()
+    {
+        var content = {'deviceId': '0' };
+        var package = {
+            'Type': 'getLightSwitchStatus',
+            'Content': content
+        }
+        ws_send(JSON.stringify(package));  
+    }
+
+    function turnOnLightPower()
+    {
+        var content = {'deviceId': '0' };
+        var package = {
+            'Type': 'turnOnLightPower',
+            'Content': content
+        }
+        ws_send(JSON.stringify(package));  
+    }
+
+    function turnOffLightPower()
+    {
+        var content = {'deviceId': '0' };
+        var package = {
+            'Type': 'turnOffLightPower',
+            'Content': content
+        }
+        ws_send(JSON.stringify(package));  
+    }
+
+
+</script>  
+
+<body>
+设备ID <input type="text" name="deviceId" id="deviceId" value="0" />  <br><br>
+<button type="button"  onclick="getDhtStatus()" />获取传感器状态 </button> <font id="status"></font><br><br>
+<button type="button"  onclick="getTemperature()" />获取温度数据 </button> <font id="temperature"></font><br><br>
+<button type="button"  onclick="getHumidity()" />获取湿度数据 </button> <font id="humidity"></font><br><br>
+<hr />
+<button type="button"  onclick="getAcStatus()" />获取空调控制器状态 </button> <font id="acStatus"></font><br><br>
+<button type="button"  onclick="turnOnAc()" />打开空调 </button> <font id="turnOnAcResult"></font><br><br>
+<button type="button"  onclick="setAcTemperature()" />设置空调温度 </button>  
+<input type="text" name="acTemperature" id="acTemperature" value="27" />  <br><br>
+<button type="button"  onclick="turnOffAc()" />关闭空调 </button> <font id="turnOffAcResult"></font><br><br>
+<hr />
+
+<button type="button"  onclick="getDoorlockStatus()" />获取门锁控制器状态 </button> <font id="doorlockStatus"></font><br><br>
+<button type="button"  onclick="getDoorlockSwitchStatus()" />获取门锁开关状态 </button> <font id="doorlockSwitchStatus"></font><br><br>
+<button type="button"  onclick="turnOnElectricPower()" />打开门锁 </button> <font id="turnOnElectricPowerResult"></font><br><br>
+<button type="button"  onclick="turnOffElectricPower()" />关闭门锁</button> <font id="turnOffElectricPowerResult"></font><br><br>
+<hr />
+<button type="button"  onclick="getLightStatus()" />获取灯控制器状态 </button> <font id="lightStatus"></font><br><br>
+<button type="button"  onclick="getLightSwitchStatus()" />获取灯开关状态 </button> <font id="lightSwitchStatus"></font><br><br>
+<button type="button"  onclick="turnOnLightPower()" />开灯</button> <font id="turnOnLightPowerResult"></font><br><br>
+<button type="button"  onclick="turnOffLightPower()" />关灯</button> <font id="turnOffLightPowerResult"></font><br><br>
+
+</body>
+</html>
